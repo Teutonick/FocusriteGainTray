@@ -1,0 +1,25 @@
+FocGrain is an independent community project for controlling input gain via MIDI.
+It is not a Focusrite product and is not endorsed by Focusrite.
+
+Before copying FocGrain, setup checks Windows, Visual C++ x64, Windows MIDI
+Services, Virtual Device App Transport, Focusrite Control 2 and registration
+of the Focusrite driver package. .NET is included with the application.
+
+If Visual C++ or FC2 is missing, this wizard offers an official download
+and launches the vendor installer after confirmation. The original license,
+driver and restart choices remain interactive. Save your work first:
+audio driver installation may interrupt audio applications.
+
+The system MIDI service and Virtual Device App Transport come through
+Windows Update. If unavailable, setup offers Windows Update and a recheck.
+It does not change MIDI mode or install third-party virtual MIDI drivers.
+
+FocGrain uses Windows MIDI Services API Preview 11. Preview components may
+need updates. A newer setup updates FocGrain using the same application ID;
+uninstall removes its app-local preview API. The application can check
+GitHub Releases on request; it never downloads or installs updates silently.
+
+Prerequisite detection does not verify physical input compatibility or FC2
+MIDI configuration. Select FocGrain in FC2 MIDI Control after launching.
+The application cannot read hardware gain. Minimum gain is not mute.
+The software is provided AS IS; see the MIT license and third-party notices.

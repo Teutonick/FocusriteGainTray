@@ -3,5 +3,10 @@
   <ItemGroup>
     <Compile Include="../../src/FocusriteGainTray/AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="../../src/FocusriteGainTray/GainState.cs" Link="GainState.cs" />
+    <Compile Include="../../src/FocusriteGainTray/PrerequisitePolicy.cs" Link="PrerequisitePolicy.cs" />
+    <Compile Include="../../src/FocusriteGainTray/Ui.cs" Link="Ui.cs" />
+    <Compile Include="../../src/FocusriteGainTray/Updates.cs" Link="Updates.cs" />
+    <Compile Include="../../src/FocusriteGainTray/BoundedWorker.cs" Link="BoundedWorker.cs" />
+    <Compile Include="../../src/FocusriteGainTray/SetupGuide.cs" Link="SetupGuide.cs" />
   </ItemGroup>
 </Project>

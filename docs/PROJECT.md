@@ -2,7 +2,7 @@
 
 ## Product
 
-Single Windows tray process for toggling user-selected minimum/maximum hardware input gain through documented FC2 MIDI. Current scope: Analog 1/2, CC12/13, MIDI channel 1, UMP group 0, MIDI 1.0 messages. No automatic hardware discovery or gain readback.
+FocGrain: single Windows tray process for toggling user-selected minimum/maximum hardware input gain through documented FC2 MIDI. Current scope: Analog 1/2, CC12/13, MIDI channel 1, UMP group 0, MIDI 1.0 messages. No automatic hardware discovery or gain readback.
 
 ## Architecture
 
@@ -12,6 +12,7 @@ Single Windows tray process for toggling user-selected minimum/maximum hardware 
 - `AppSettings`: JSON configuration, normalization and atomic file replacement.
 - `GainState`: pure command state, toggle policy and CC mapping, tested without hardware.
 - `WindowsMidiVirtualController`: official virtual transport and packet construction.
+- `PrerequisiteProbe` / `PrerequisitePolicy`: setup readiness detection and testable install gate; no endpoints or gain commands.
 - `HotkeyManager`: Windows RegisterHotKey lifecycle.
 
 ## Invariants
@@ -25,3 +26,11 @@ Start with AGENTS.md and this contract. State scope and acceptance criteria befo
 ## Deferred
 
 Additional inputs/models, autostart, automatic discovery, installers and signed binaries require separate design and compatibility evidence. Keep preview integration isolated until the in-box API is available.
+
+Installer contract and distribution flow: [INSTALLER.md](INSTALLER.md). Only installer/user-chosen vendor prerequisites request elevation; normal tray operation remains a single desktop process.
+
+## Native-call boundary and UI
+
+All live MIDI objects are created/used/disposed through BoundedWorker on one background MTA thread. The UI awaits operations; it never synchronously waits for native RPC, SDK cleanup or a callback. One operation at a time, no queued user gain commands, no retries after a native timeout. Connect has a 10-second wait, send/disconnect 3 seconds and quit cleanup 2 seconds. A timeout cannot cancel a native operation already in progress; displayed state becomes unknown and another connection must not be spawned. The app does not automatically restart services or kill FC2. A stuck Windows service can still affect other MIDI clients independently of our UI.
+
+Ui chooses ru from Russian UI cultures and en otherwise, including default worker-thread UI culture. AppIcons owns original embedded multi-resolution marks. Updates uses an asynchronous, bounded unauthenticated GitHub request only after a button click. Version and release behavior are described in RELEASING.md.

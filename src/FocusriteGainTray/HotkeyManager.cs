@@ -47,13 +47,13 @@ internal sealed class HotkeyManager : NativeWindow, IDisposable
     {
         var (modifiers, key) = Parse(chord);
         if (!RegisterHotKey(Handle, id, modifiers | ModNoRepeat, (uint)key))
-            throw new InvalidOperationException($"Хоткей {chord} занят другой программой или недоступен (Win32 {Marshal.GetLastWin32Error()}).");
+            throw new InvalidOperationException(Ui.T($"Хоткей {chord} занят другой программой или недоступен (Win32 {Marshal.GetLastWin32Error()}).", $"Shortcut {chord} is in use or unavailable (Win32 {Marshal.GetLastWin32Error()})."));
         _registered.Add(id);
     }
 
     public static (uint modifiers, Keys key) Parse(string chord)
     {
-        if (string.IsNullOrWhiteSpace(chord)) throw new ArgumentException("Пустой хоткей");
+        if (string.IsNullOrWhiteSpace(chord)) throw new ArgumentException(Ui.T("Пустой хоткей", "Empty shortcut"));
         uint modifiers = 0;
         Keys key = Keys.None;
         foreach (var raw in chord.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
@@ -66,12 +66,12 @@ internal sealed class HotkeyManager : NativeWindow, IDisposable
                 case "WIN": modifiers |= ModWin; break;
                 default:
                     if (key != Keys.None || !Enum.TryParse(raw, true, out key) || key == Keys.None)
-                        throw new ArgumentException($"Неверный хоткей: {chord}");
+                        throw new ArgumentException(Ui.T($"Неверный хоткей: {chord}", $"Invalid shortcut: {chord}"));
                     break;
             }
         }
         if (modifiers == 0 || key == Keys.None || key is Keys.ControlKey or Keys.ShiftKey or Keys.Menu or Keys.LWin or Keys.RWin)
-            throw new ArgumentException($"Для {chord} нужна комбинация модификатора и обычной клавиши");
+            throw new ArgumentException(Ui.T($"Для {chord} нужна комбинация модификатора и обычной клавиши", $"{chord} requires a modifier and a regular key"));
         return (modifiers, key);
     }
 

@@ -3,117 +3,107 @@ namespace FocusriteGainTray;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _tray;
-    private readonly WindowsMidiVirtualController _midi = new();
+    private readonly BoundedWorker<WindowsMidiVirtualController> _midi = new(() => new());
     private readonly HotkeyManager _hotkeys;
+    private readonly SetupRequestWindow _setupRequests;
+    private readonly bool _showSetupOnStart;
     private AppSettings _settings = SettingsStore.Load();
     private readonly GainState _state = new();
     private Icon? _statusIcon;
-    private bool _ready;
-    private bool _closing;
+    private bool _ready, _busy, _closing;
 
-    public TrayApplicationContext()
+    public TrayApplicationContext(bool showSetup = false)
     {
-        _tray = new NotifyIcon
-        {
-            Icon = SystemIcons.Application,
-            Text = "Focusrite Gain Tray — starting",
-            Visible = true
-        };
-        _tray.MouseClick += (_, args) =>
-        {
-            if (args.Button == MouseButtons.Left) Toggle();
-        };
-
+        _showSetupOnStart = showSetup;
+        _statusIcon = AppIcons.Load("unknown");
+        _tray = new NotifyIcon { Icon = _statusIcon, Text = "FocGrain", Visible = true };
+        _tray.MouseClick += async (_, args) => { if (args.Button == MouseButtons.Left) await ToggleAsync(); };
         _hotkeys = new HotkeyManager(OnHotkey);
         try { _hotkeys.Apply(_settings); }
-        catch (Exception e) { Alert("Горячие клавиши: " + e.Message); }
-
+        catch (Exception ex) { Alert(Ui.T("Горячие клавиши: ", "Keyboard shortcuts: ") + ex.Message); }
         RebuildMenu();
-        // Start after message loop is alive; errors are visible in tray and log.
+        _setupRequests = new SetupRequestWindow(() => WizardHost.Show());
         Application.Idle += StartOnIdle;
     }
 
-    private void StartOnIdle(object? sender, EventArgs e)
+    private async void StartOnIdle(object? sender, EventArgs e)
     {
         Application.Idle -= StartOnIdle;
-        ConnectMidi();
+        await ConnectAsync();
+        if (_showSetupOnStart && !_closing) WizardHost.Show();
     }
 
-    private void ConnectMidi()
+    private Task ConnectAsync()
     {
+        if (_busy || _closing) return Task.CompletedTask;
         _ready = false;
         _state.Reset();
+        return RunMidiAsync(controller => controller.Connect(), TimeSpan.FromSeconds(10), () =>
+        {
+            _ready = true;
+            _tray.BalloonTipTitle = "FocGrain";
+            _tray.BalloonTipText = Ui.T("В FC2 выберите FocGrain, канал 1 / All channels и снимите Enable pickup. Пошаговый мастер доступен в меню трея.", "In FC2 select FocGrain, channel 1 / All channels, and turn OFF Enable pickup. Open the setup wizard from the tray menu.");
+            _tray.ShowBalloonTip(6000);
+        });
+    }
+
+    private async Task RunMidiAsync(Action<WindowsMidiVirtualController> action, TimeSpan timeout, Action onSuccess)
+    {
+        if (_busy || _closing) return;
+        _busy = true;
+        RebuildMenu();
         try
         {
-            _midi.Connect();
-            _ready = true;
-            SetTooltip("MIDI ready — select device in Focusrite Control 2");
-            _tray.BalloonTipTitle = "Focusrite Gain Tray";
-            _tray.BalloonTipText = "В Focusrite Control 2 → Preferences → Application выбери MIDI Control: Focusrite Gain Tray, канал All channels.";
-            _tray.ShowBalloonTip(6000);
+            await _midi.ExecuteAsync(action, timeout);
+            if (!_closing) onSuccess();
         }
         catch (Exception ex)
         {
-            _ready = false;
-            Log.Write("MIDI connect failed: " + ex);
-            SetTooltip("MIDI unavailable — right-click → Reconnect");
-            Alert("MIDI недоступен: " + ex.Message);
+            Log.Write("MIDI operation failed: " + ex);
+            if (!_closing) { _ready = false; _state.Reset(); Alert(ex.Message); }
         }
-        RebuildMenu();
-    }
-
-    private void SetTooltip(string text)
-    {
-        // Windows NotifyIcon.Text limit is 63 chars.
-        _tray.Text = text.Length > 63 ? text[..63] : text;
+        finally
+        {
+            _busy = false;
+            if (!_closing) RebuildMenu();
+        }
     }
 
     private void OnHotkey(HotkeyAction action)
     {
-        switch (action)
+        _ = action switch
         {
-            case HotkeyAction.Toggle: Toggle(); break;
-            case HotkeyAction.Increase: Adjust(+_settings.Step); break;
-            case HotkeyAction.Decrease: Adjust(-_settings.Step); break;
-        }
+            HotkeyAction.Toggle => ToggleAsync(),
+            HotkeyAction.Increase => AdjustAsync(_settings.Step),
+            _ => AdjustAsync(-_settings.Step)
+        };
     }
 
-    private void Toggle()
+    private Task ToggleAsync()
     {
         int input = _settings.SelectedInput;
-        ChannelSettings channel = _settings.Channel(input);
-        SendGain(input, _state.Next(input, channel));
+        return SendGainAsync(input, _state.Next(input, _settings.Channel(input)));
     }
 
-    private void Adjust(int amount)
+    private Task AdjustAsync(int amount)
     {
         int input = _settings.SelectedInput;
         int baseline = _state.LastSent(input) ?? _settings.Channel(input).B;
-        SendGain(input, Math.Clamp(baseline + amount, 0, 127));
+        return SendGainAsync(input, Math.Clamp(baseline + amount, 0, 127));
     }
 
-    private void SendGain(int input, int midiValue)
+    private Task SendGainAsync(int input, int value)
     {
+        // Never queue clicks/hotkeys while native MIDI is busy: no delayed gain changes.
+        if (_busy || _closing) return Task.CompletedTask;
         if (!_ready)
         {
-            Alert("MIDI ещё не подключён. Проверь Windows MIDI Services и нажми Reconnect MIDI.");
-            return;
+            Alert(_midi.Faulted
+                ? Ui.T("MIDI не ответил. Перезапустите FocGrain.", "MIDI timed out. Restart FocGrain.")
+                : Ui.T("MIDI-порт не открыт. Выберите «Повторить открытие MIDI-порта» в трее.", "The MIDI port is not open. Select Retry opening MIDI port in the tray."));
+            return Task.CompletedTask;
         }
-        try
-        {
-            _midi.SendGain(input, midiValue);
-            _state.Record(input, midiValue);
-            SetTooltip($"Analog {input}: MIDI Gain {midiValue}/127 (sent)");
-            RebuildMenu();
-        }
-        catch (Exception e)
-        {
-            _ready = false;
-            _state.Reset();
-            RebuildMenu();
-            Log.Write("MIDI send failed: " + e);
-            Alert(e.Message);
-        }
+        return RunMidiAsync(controller => controller.SendGain(input, value), TimeSpan.FromSeconds(3), () => _state.Record(input, value));
     }
 
     private void SelectInput(int input)
@@ -126,7 +116,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void PersistSettings()
     {
         try { SettingsStore.Save(_settings); }
-        catch (Exception e) { Alert("Не удалось сохранить настройки: " + e.Message); }
+        catch (Exception ex) { Alert(Ui.T("Не удалось сохранить настройки: ", "Could not save settings: ") + ex.Message); }
     }
 
     private void Configure()
@@ -144,8 +134,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex)
         {
             try { _hotkeys.Apply(previous); }
-            catch (Exception recoveryEx) { Log.Write("Hotkey rollback failed: " + recoveryEx); }
-            Alert("Хоткеи не применены: " + ex.Message);
+            catch (Exception recovery) { Log.Write("Hotkey rollback failed: " + recovery); }
+            Alert(Ui.T("Хоткеи не применены: ", "Shortcuts were not applied: ") + ex.Message);
         }
     }
 
@@ -153,91 +143,88 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         UpdateIcon();
         var menu = new ContextMenuStrip();
-        var status = new ToolStripMenuItem(_ready ? "● MIDI connected (commands only)" : "○ MIDI disconnected") { Enabled = false };
-        menu.Items.Add(status);
+        string status = _busy ? Ui.T("MIDI: выполняется операция…", "MIDI: operation in progress…") : _ready ? Ui.T("Порт FocGrain открыт (приём FC2 не проверен)", "FocGrain port open (FC2 receipt not verified)") : Ui.T("MIDI-порт не открыт", "MIDI port is not open");
+        menu.Items.Add(new ToolStripMenuItem(status) { Enabled = false });
         menu.Items.Add(new ToolStripSeparator());
-
         foreach (int channel in new[] { 1, 2 })
         {
             int captured = channel;
-            menu.Items.Add(new ToolStripMenuItem($"Analog {channel}")
-            {
-                Checked = _settings.SelectedInput == channel,
-                CheckOnClick = false
-            });
-            ((ToolStripMenuItem)menu.Items[^1]).Click += (_, _) => SelectInput(captured);
+            menu.Items.Add(new ToolStripMenuItem($"Analog {channel}", null, (_, _) => SelectInput(captured))
+                { Checked = _settings.SelectedInput == channel, Enabled = !_busy });
         }
         menu.Items.Add(new ToolStripSeparator());
-        var ch = _settings.Channel(_settings.SelectedInput);
-        menu.Items.Add(new ToolStripMenuItem($"Минимум — CC {ch.A}", null,
-            (_, _) => SendGain(_settings.SelectedInput, ch.A)));
-        menu.Items.Add(new ToolStripMenuItem($"Максимум — CC {ch.B}", null,
-            (_, _) => SendGain(_settings.SelectedInput, ch.B)));
-        menu.Items.Add(new ToolStripMenuItem($"Переключить A ↔ B ({_settings.ToggleHotkey})", null, (_, _) => Toggle()));
-        menu.Items.Add(new ToolStripMenuItem($"+ {_settings.Step} ({_settings.IncreaseHotkey})", null, (_, _) => Adjust(+_settings.Step)));
-        menu.Items.Add(new ToolStripMenuItem($"− {_settings.Step} ({_settings.DecreaseHotkey})", null, (_, _) => Adjust(-_settings.Step)));
+        int input = _settings.SelectedInput;
+        var ch = _settings.Channel(input);
+        void Command(string text, Func<Task> command) => menu.Items.Add(new ToolStripMenuItem(text, null, async (_, _) => await command()) { Enabled = _ready && !_busy });
+        Command(Ui.T($"Минимум — MIDI-значение {ch.A}", $"Minimum — MIDI value {ch.A}"), () => SendGainAsync(input, ch.A));
+        Command(Ui.T($"Максимум — MIDI-значение {ch.B}", $"Maximum — MIDI value {ch.B}"), () => SendGainAsync(input, ch.B));
+        Command(Ui.T($"Переключить MIN ↔ MAX ({_settings.ToggleHotkey})", $"Toggle MIN ↔ MAX ({_settings.ToggleHotkey})"), ToggleAsync);
+        Command($"+ {_settings.Step} ({_settings.IncreaseHotkey})", () => AdjustAsync(_settings.Step));
+        Command($"− {_settings.Step} ({_settings.DecreaseHotkey})", () => AdjustAsync(-_settings.Step));
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Настройки...", null, (_, _) => Configure()));
-        menu.Items.Add(new ToolStripMenuItem("Reconnect MIDI", null, (_, _) => ConnectMidi()));
-        menu.Items.Add(new ToolStripMenuItem("Открыть лог", null, (_, _) =>
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Настройки…", "Settings…"), null, (_, _) => Configure()) { Enabled = !_busy });
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Мастер настройки Focusrite Control 2…", "Focusrite Control 2 setup wizard…"), null, (_, _) => WizardHost.Show()));
+        // Do not tear down/recreate an already-live endpoint while FC2 is selecting it.
+        if (!_ready && !_midi.Faulted)
+            menu.Items.Add(new ToolStripMenuItem(Ui.T("Повторить открытие MIDI-порта", "Retry opening MIDI port"), null, async (_, _) => await ConnectAsync()) { Enabled = !_busy });
+        if (_midi.Faulted)
+            menu.Items.Add(new ToolStripMenuItem(Ui.T("MIDI не ответил — перезапустите FocGrain", "MIDI timed out — restart FocGrain")) { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Проверить обновления…", "Check for updates…"), null, (_, _) => { using var dialog = new UpdateDialog(); dialog.ShowDialog(); }));
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Открыть лог", "Open log"), null, (_, _) =>
         {
-            var log = Path.Combine(SettingsStore.DirectoryPath, "application.log");
-            if (File.Exists(log))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(log) { UseShellExecute = true });
-            else Alert("Лог пока пуст.");
+            try
+            {
+                var path = Path.Combine(SettingsStore.DirectoryPath, "application.log");
+                if (File.Exists(path)) System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+                else Alert(Ui.T("Лог пока пуст.", "The log is empty."));
+            }
+            catch (Exception ex) { Alert(ex.Message); }
         }));
-        menu.Items.Add(new ToolStripMenuItem("Выход", null, (_, _) => ExitThread()));
-
-        var oldMenu = _tray.ContextMenuStrip;
+        menu.Items.Add(new ToolStripMenuItem($"FocGrain {ProductInfo.VersionText}") { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Выход", "Quit"), null, (_, _) => ExitThread()));
+        var old = _tray.ContextMenuStrip;
         _tray.ContextMenuStrip = menu;
-        // ContextMenuStrip should not be disposed while it is actively being shown.
-        if (oldMenu is not null)
+        if (old is not null)
         {
-            if (!oldMenu.Visible) oldMenu.Dispose();
-            else oldMenu.Closed += (_, _) => oldMenu.Dispose();
+            if (!old.Visible) old.Dispose();
+            else old.Closed += (_, _) => old.Dispose();
         }
     }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool DestroyIcon(IntPtr handle);
 
     private void UpdateIcon()
     {
         int input = _settings.SelectedInput;
         string mode = _ready ? _state.Mode(input, _settings.Channel(input)) : "!";
-        using var bitmap = new Bitmap(32, 32);
-        using var graphics = Graphics.FromImage(bitmap);
-        graphics.Clear(mode == "MIN" ? Color.DarkSlateBlue : mode == "MAX" ? Color.DarkOrange : Color.DimGray);
-        using var font = new Font("Segoe UI", mode.Length > 1 ? 8 : 18, FontStyle.Bold);
-        using var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        graphics.DrawString(mode, font, Brushes.White, new RectangleF(0, 0, 32, 32), format);
-        IntPtr handle = bitmap.GetHicon();
-        Icon next;
-        try { using var borrowed = Icon.FromHandle(handle); next = (Icon)borrowed.Clone(); }
-        finally { DestroyIcon(handle); }
+        string icon = _busy ? "unknown" : mode switch { "MIN" => "min", "MAX" => "max", "MID" => "mid", "?" => "unknown", _ => "error" };
+        var next = AppIcons.Load(icon);
         var previous = _statusIcon;
         _tray.Icon = next;
         _statusIcon = next;
         previous?.Dispose();
-        SetTooltip($"Analog {input}: {mode} | last sent: {_state.LastSent(input)?.ToString() ?? "unknown"}");
+        string unknown = Ui.T("неизвестно", "unknown");
+        string text = _busy ? Ui.T("FocGrain — MIDI: ожидание…", "FocGrain — waiting for MIDI…") : $"Analog {input}: {mode} | {Ui.T("отправлено", "last sent")}: {_state.LastSent(input)?.ToString() ?? unknown}";
+        _tray.Text = text.Length > 63 ? text[..63] : text;
     }
 
     private void Alert(string message)
     {
-        _tray.BalloonTipTitle = "Focusrite Gain Tray";
+        _tray.BalloonTipTitle = "FocGrain";
         _tray.BalloonTipText = message;
         _tray.ShowBalloonTip(5000);
         Log.Write(message);
     }
 
-    protected override void ExitThreadCore()
+    protected override async void ExitThreadCore()
     {
         if (_closing) return;
         _closing = true;
         Application.Idle -= StartOnIdle;
+        _setupRequests.Dispose();
+        WizardHost.Close();
         _hotkeys.Dispose();
-        _midi.Dispose();
         _tray.Visible = false;
+        try { await _midi.StopAsync(TimeSpan.FromSeconds(2)); }
+        catch (Exception ex) { Log.Write("MIDI shutdown: " + ex); }
         _tray.ContextMenuStrip?.Dispose();
         _tray.Dispose();
         _statusIcon?.Dispose();

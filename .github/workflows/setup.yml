@@ -1,0 +1,30 @@
+name: build-setup
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Prepare official build dependencies
+        shell: pwsh
+        run: |
+          ./scripts/Prepare-MidiSdk.ps1
+          Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe -OutFile .work/inno-installer.exe
+          if ((Get-FileHash .work/inno-installer.exe).Hash -ne '9C73C3BAE7ED48D44112A0F48E66742C00090BDB5BEF71D9D3C056C66E97B732') { throw 'Inno hash mismatch' }
+          if ((Get-AuthenticodeSignature .work/inno-installer.exe).Status -ne 'Valid') { throw 'Invalid Inno signature' }
+          $compilerDir = Join-Path $PWD '.work/inno'
+          $process = Start-Process .work/inno-installer.exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/NOICONS',('/DIR="' + $compilerDir + '"')) -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Inno compiler preparation failed' }
+      - run: dotnet run --project tests/GainTray.Tests
+      - run: ./scripts/Build-Setup.ps1
+      - run: ./tests/Test-SetupPayload.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FocGrain-setup-x64
+          path: artifacts/setup/*
