@@ -1,0 +1,17 @@
+name: validate
+on: [push, pull_request]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - shell: pwsh
+        run: ./scripts/Prepare-MidiSdk.ps1
+      - run: dotnet run --project tests/GainTray.Tests
+      - run: dotnet restore src/FocusriteGainTray/FocusriteGainTray.csproj
+      - run: dotnet build src/FocusriteGainTray/FocusriteGainTray.csproj --no-restore -c Release
