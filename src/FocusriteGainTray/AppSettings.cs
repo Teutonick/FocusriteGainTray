@@ -80,7 +80,10 @@ internal static class Log
         try
         {
             Directory.CreateDirectory(SettingsStore.DirectoryPath);
-            File.AppendAllText(Path.Combine(SettingsStore.DirectoryPath, "application.log"),
+            string path = Path.Combine(SettingsStore.DirectoryPath, "application.log");
+            if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
+                File.Move(path, path + ".previous", overwrite: true);
+            File.AppendAllText(path,
                 $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
         }
         catch { /* logging must never crash audio control */ }

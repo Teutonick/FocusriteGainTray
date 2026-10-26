@@ -22,7 +22,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try { _hotkeys.Apply(_settings); }
         catch (Exception ex) { Alert(Ui.T("Горячие клавиши: ", "Keyboard shortcuts: ") + ex.Message); }
         RebuildMenu();
-        _setupRequests = new SetupRequestWindow(() => WizardHost.Show());
+        _setupRequests = new SetupRequestWindow(() => WizardHost.Show(), () => ExitThread());
         Application.Idle += StartOnIdle;
     }
 

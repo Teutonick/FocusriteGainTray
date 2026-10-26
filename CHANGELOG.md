@@ -35,3 +35,9 @@
 - Add dependency-free model regression scenarios and Windows build CI.
 
 Application compilation and physical-interface acceptance status are recorded in docs/AUDIT.md and docs/TESTING.md.
+
+## 0.5.0
+
+- Исправлены размеры и выравнивание кнопок настроек; добавлен автозапуск Windows, выключенный по умолчанию.
+- Setup/удаление закрывают процессы только из выбранной папки: обычный выход и ограниченный принудительный fallback.
+- Удаление очищает автозапуск и данные текущего пользователя; размер лога ограничен.

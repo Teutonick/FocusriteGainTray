@@ -72,3 +72,11 @@ The finish action now defaults to launching `FocGrain.exe --setup`, as explicitl
 The four-page guide loads the two original user-supplied screenshots from embedded resources and works offline. It explains Application settings, FocGrain/channel selection, mandatory Enable pickup OFF, and a manual gain-knob check. It never changes FC2 settings or sends gain/scan/ramp commands. Image enlargement and resizable/scrollable content are provided. Offline Markdown versions and screenshots are installed in docs/ and assets/setup/. See FC2_SETUP.md and its English version.
 
 The disabled connected-state Connect MIDI action was removed. The header now says the FocGrain port is open without asserting FC2 receipt. Retry appears only if the port is not open and no native timeout has locked the worker. Presets are labeled MIDI values, not misleading CC numbers.
+
+## Версия 0.5.0: запуск и удаление
+
+В настройках появился пункт «Запускать при входе в Windows». По умолчанию он выключен; включение добавляет одну запись FocGrain в HKCU\Software\Microsoft\Windows\CurrentVersion\Run. Снятие галочки удаляет её. Запуск не отправляет команды gain.
+
+При обновлении setup предлагает закрыть экземпляры из выбранной папки установки. Сначала отправляется запрос обычного выхода; через 5 секунд старый или зависший процесс завершается принудительно. Другие папки установки, Focusrite Control 2 и MIDI Services не затрагиваются. При удалении используется тот же механизм, удаляются файлы установки, ярлыки, запись автозапуска, настройки и логи текущего пользователя в %LOCALAPPDATA%\FocusriteGainTray. Настройки других учётных записей не удаляются. Общие компоненты Focusrite, Visual C++ и Windows остаются установленными.
+
+Выход скрывает и освобождает значок трея, освобождает горячие клавиши и окна, даёт MIDI SDK две секунды на закрытие. Зависший native-вызов выполняется на фоновом потоке и не должен удерживать процесс. Очистка виртуальных портов внутри Windows MIDI Services всё ещё зависит от preview SDK/службы: отсутствие оставшихся портов после реального выхода/удаления требует отдельной аппаратной проверки; остановку общей MIDI-службы установщик не выполняет. Лог ограничен текущим файлом около 1 МБ и одной предыдущей копией.

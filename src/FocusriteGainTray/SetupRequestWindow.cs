@@ -9,9 +9,11 @@ internal sealed class SetupRequestWindow : NativeWindow, IDisposable
     private const string Caption = "FocGrain.SetupHost.A762C2E7-FBA2-4CB0-B856-90359B52446A";
     private static readonly uint MessageId = RegisterWindowMessage(Caption);
     private readonly Action _show;
-    public SetupRequestWindow(Action show)
+    private readonly Action _close;
+    public SetupRequestWindow(Action show, Action close)
     {
         _show = show;
+        _close = close;
         CreateHandle(new CreateParams { Caption = Caption });
     }
     public static bool SignalExisting()
@@ -21,9 +23,25 @@ internal sealed class SetupRequestWindow : NativeWindow, IDisposable
     }
     protected override void WndProc(ref Message message)
     {
+        if (message.Msg == 0x10) { _close(); return; }
         if (MessageId != 0 && message.Msg == MessageId) { _show(); return; }
         base.WndProc(ref message);
     }
+    public static void RequestClose(int processId)
+    {
+        EnumWindows((window, _) =>
+        {
+            GetWindowThreadProcessId(window, out uint id);
+            var title = new System.Text.StringBuilder(160);
+            GetWindowText(window, title, title.Capacity);
+            if (id == processId && title.ToString() == Caption) PostMessage(window, 0x10, IntPtr.Zero, IntPtr.Zero);
+            return true;
+        }, IntPtr.Zero);
+    }
+    private delegate bool EnumWindowProc(IntPtr window, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowProc callback, IntPtr parameter);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int count);
     public void Dispose() { DestroyHandle(); GC.SuppressFinalize(this); }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr FindWindow(string? className, string title);

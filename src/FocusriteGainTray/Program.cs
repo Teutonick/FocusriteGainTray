@@ -8,6 +8,23 @@ internal static class Program
     private static int Main(string[] args)
     {
         Ui.Initialize();
+        if (args.Length == 2 && args[0] == "--shutdown-installation")
+            return InstallationShutdown.Run(args[1]);
+        if (args.Length == 2 && args[0] is "--lifecycle-test-host" or "--lifecycle-test-unresponsive")
+        {
+            // Isolated process-lifecycle QA; no MIDI, tray, startup entry or settings.
+            ApplicationConfiguration.Initialize();
+            using var context = new ApplicationContext();
+            using var window = new SetupRequestWindow(() => { }, () =>
+            {
+                File.WriteAllText(args[1] + ".closed", "graceful");
+                context.ExitThread();
+            });
+            if (args[0] == "--lifecycle-test-unresponsive") window.Dispose();
+            File.WriteAllText(args[1], "ready");
+            Application.Run(context);
+            return 0;
+        }
         if (args.Length == 3 && args[0] == "--guide-preview" && args[1] is "ru" or "en")
         {
             Ui.Initialize(args[1]);

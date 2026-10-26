@@ -8,7 +8,7 @@ FocGrain uses documented Focusrite Control 2 MIDI commands. It is not made, spon
 
 ## Install and use
 
-1. Run **FocGrain-0.4.0-Setup-x64.exe** on Windows 11 25H2 x64 (build 26200+).
+1. Run **FocGrain-0.5.0-Setup-x64.exe** on Windows 11 25H2 x64 (build 26200+).
 2. Setup checks Visual C++ x64, Windows MIDI Services, Virtual Device App Transport, FC2 and driver-package registration. .NET is included.
 3. If required, use the wizard to download the verified official Visual C++ or FC2 installer. Vendor license/driver/restart choices remain interactive. System MIDI components come through Windows Update; the wizard links to it and rechecks readiness.
 4. Use the separate [screenshot setup wizard](docs/FC2_SETUP.en.md) at the end of setup, from the tray/Settings, or its Start menu shortcut. Start FocGrain. In FC2, select **More options → Preferences → Application → MIDI Control: FocGrain**, channel 1 or All channels. **Turn OFF Enable pickup**; otherwise preset changes may be ignored.
@@ -35,3 +35,5 @@ Presets/log: `%LOCALAPPDATA%\FocusriteGainTray`. Uninstall leaves presets and sh
 Project source and original icon assets are [MIT licensed](LICENSE): use, modify, redistribute and sell copies while retaining the copyright and license notice. MIT does not grant rights to third-party trademarks, FC2, drivers or Microsoft components. [Dependency and Preview redistribution terms](THIRD_PARTY_NOTICES.md) remain applicable.
 
 Provided **AS IS**, without warranty. To the extent permitted by applicable law, authors are not liable for damage, interrupted recording, data loss or other consequences. Full warranty/liability terms are in LICENSE. Lower monitoring levels before testing gain; this is not hearing protection or a guaranteed microphone mute.
+
+Windows startup is opt-in in Settings and disabled by default. Setup offers to close FocGrain before upgrading. Uninstall removes the current user's settings, logs and startup entry; shared Windows/Focusrite components remain installed.

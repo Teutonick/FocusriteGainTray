@@ -16,7 +16,7 @@ internal sealed class SettingsDialog : Form
     public SettingsDialog(AppSettings current)
     {
         Text = Ui.T("FocGrain — настройки", "FocGrain — settings");
-        ClientSize = new Size(570, 465);
+        ClientSize = new Size(600, 520);
         Icon = _ownedIcon;
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -57,17 +57,20 @@ internal sealed class SettingsDialog : Form
             Text = Ui.T("MIDI 0–127 — не дБ. Текущий gain устройства не считывается.\nДля хоткея выберите поле и нажмите комбинацию клавиш.", "MIDI 0–127 is not dB. Hardware gain cannot be read back.\nTo set a shortcut, click its field and press the key combination.")
         };
         Controls.Add(note);
-        var version = new Label { Text = $"FocGrain {ProductInfo.VersionText}", Left = 17, Top = 378, Width = 200, Height = 22 };
-        var updates = new Button { Text = Ui.T("Проверить обновления…", "Check for updates…"), Left = 17, Top = 411, Width = 215, Height = 30 };
+        bool startupInitiallyEnabled = StartupRegistration.Enabled;
+        var startup = new CheckBox { Text = Ui.T("Запускать при входе в Windows", "Start when I sign in to Windows"), Left = 17, Top = 377, Width = 550, Height = 28, Checked = startupInitiallyEnabled };
+        Controls.Add(startup);
+        var version = new Label { Text = $"FocGrain {ProductInfo.VersionText}", Left = 17, Top = 420, Width = 200, Height = 24 };
+        var updates = new Button { Text = Ui.T("Проверить обновления…", "Check for updates…"), Left = 17, Top = 465, Width = 230, Height = 34 };
         updates.Click += (_, _) => { using var dialog = new UpdateDialog(); dialog.ShowDialog(this); };
         Controls.Add(version);
         Controls.Add(updates);
-        var guide = new LinkLabel { Text = Ui.T("Мастер настройки FC2…", "FC2 setup wizard…"), Left = 290, Top = 378, Width = 250, Height = 22 };
+        var guide = new LinkLabel { Text = Ui.T("Мастер настройки FC2…", "FC2 setup wizard…"), Left = 310, Top = 420, Width = 265, Height = 24 };
         guide.LinkClicked += (_, _) => WizardHost.Show(this);
         Controls.Add(guide);
 
-        var save = new Button { Text = Ui.T("Сохранить", "Save"), Left = 350, Top = 415, Width = 90 };
-        var cancel = new Button { Text = Ui.T("Отмена", "Cancel"), Left = 450, Top = 415, Width = 75, DialogResult = DialogResult.Cancel };
+        var save = new Button { Text = Ui.T("Сохранить", "Save"), Left = 350, Top = 465, Width = 115, Height = 34 };
+        var cancel = new Button { Text = Ui.T("Отмена", "Cancel"), Left = 475, Top = 465, Width = 105, Height = 34, DialogResult = DialogResult.Cancel };
         Controls.Add(save);
         Controls.Add(cancel);
         AcceptButton = save;
@@ -95,6 +98,7 @@ internal sealed class SettingsDialog : Form
                     DecreaseHotkey = _decrease.Text,
                 };
                 updated.Validate();
+                if (startup.Checked != startupInitiallyEnabled) StartupRegistration.SetEnabled(startup.Checked);
                 ResultSettings = updated;
                 DialogResult = DialogResult.OK;
                 Close();

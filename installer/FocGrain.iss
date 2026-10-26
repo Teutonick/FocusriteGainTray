@@ -11,7 +11,7 @@ AppId={{A762C2E7-FBA2-4CB0-B856-90359B52446A}
 AppName=FocGrain
 AppVersion={#AppVersion}
 AppPublisher=FocGrain Contributors (independent community project)
-AppMutex=Local\FocusriteGainTray
+; Application closure is handled below, before file replacement.
 DefaultDirName={autopf}\FocGrain
 DefaultGroupName=FocGrain
 DisableProgramGroupPage=yes
@@ -51,6 +51,12 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"; InfoBeforeFile:
 ; Same self-contained payload is extracted to a temporary folder for the pre-install probe.
 Source: "{#PayloadDir}\*"; DestDir: "{tmp}\probe"; Excludes: "*.pdb"; Flags: dontcopy recursesubdirs createallsubdirs
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "FocGrain"; Flags: dontcreatekey uninsdeletevalue
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{localappdata}\FocusriteGainTray"
 
 [InstallDelete]
 ; Allows a later in-box-API installer to remove the old app-local preview DLL/PRI.
@@ -318,6 +324,23 @@ begin
   end;
 end;
 
+function CloseInstalledApp(Helper: String): Boolean;
+var Code: Integer; SilentMode: Boolean;
+begin
+  Result := False;
+  if not FileExists(ExpandConstant('{app}\FocGrain.exe')) then begin Result := True; exit; end;
+  if IsUninstaller then SilentMode := UninstallSilent else SilentMode := WizardSilent;
+  if not SilentMode then
+    if MsgBox(L('Перед продолжением будут закрыты запущенные экземпляры FocGrain из этой папки установки. Зависшие и старые версии будут завершены принудительно. Продолжить?', 'Continue and close running FocGrain instances from this installation folder? Older or unresponsive versions will be terminated if necessary.'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then exit;
+  Result := Exec(Helper, '--shutdown-installation "' + ExpandConstant('{app}\FocGrain.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+end;
+
+function InitializeUninstall: Boolean;
+begin
+  Result := CloseInstalledApp(ExpandConstant('{app}\FocGrain.exe'));
+  if not Result then MsgBox(L('Не удалось закрыть FocGrain. Закройте его и повторите удаление.', 'Could not close FocGrain. Close it and retry uninstalling.'), mbError, MB_OK);
+end;
+
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
 #ifdef PreviewOnly
@@ -328,4 +351,6 @@ begin
   Result := '';
   if not CheckDependencies then
     Result := L('Компоненты ещё не готовы. Запустите setup интерактивно и выполните шаг подготовки. ', 'Prerequisites are not ready. Run setup interactively and complete preparation. ') + StatusText.Text;
+  if (Result = '') and (not CloseInstalledApp(ExpandConstant('{tmp}\probe\FocGrain.exe'))) then
+    Result := L('Закройте FocGrain или разрешите его завершение и повторите установку.', 'Close FocGrain or allow setup to close it, then retry.');
 end;
