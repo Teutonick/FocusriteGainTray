@@ -25,6 +25,7 @@ internal sealed class WindowsMidiVirtualController : IDisposable
 
     public void Connect()
     {
+        if (IsConnected) { WaitForLegacyInput(); return; }
         Disconnect();
         Log.Write($"MIDI connect started: {_deviceName}; apartment={Thread.CurrentThread.GetApartmentState()}");
 
@@ -78,6 +79,10 @@ internal sealed class WindowsMidiVirtualController : IDisposable
                 MaxSystemExclusive8Streams = 0
             });
 
+            // AssociationId links the two sides; ProductInstanceId identifies the
+            // SWD device. Keep the latter stable and log both for diagnostics.
+            Log.Write($"MIDI virtual association: {config.AssociationId}; SDK package=0.99.92-preview.11");
+
             Log.Write("MIDI connect: creating session");
             _session = MidiSession.Create(_deviceName)
                 ?? throw new InvalidOperationException(Ui.T("MidiSession.Create вернул null", "MidiSession.Create returned null"));
@@ -98,14 +103,35 @@ internal sealed class WindowsMidiVirtualController : IDisposable
             if (!_connection.Open())
                 throw new InvalidOperationException(Ui.T("Не удалось открыть MIDI endpoint", "Could not open the MIDI endpoint"));
 
-            Status = "Ready; select 'FocGrain' in Focusrite Control 2 > Preferences > Application";
-            Log.Write("Virtual MIDI 1.0 endpoint created: " + _deviceName);
+            Log.Write("Virtual device-side connection opened: " + _deviceName);
+            Log.Write("MIDI device endpoint: " + _device.DeviceEndpointDeviceId);
         }
         catch
         {
             Disconnect();
             throw;
         }
+        // Visibility can lag creation. Keep the open endpoint on a returned
+        // visibility error: a retry checks it without tearing down/recreating it.
+        WaitForLegacyInput();
+    }
+
+    private void WaitForLegacyInput()
+    {
+        Log.Write("MIDI connect: waiting for WinMM input " + _deviceName);
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            if (LegacyMidiInputs.Contains(_deviceName))
+            {
+                Status = "Ready; select FocGrain in FC2";
+                Log.Write("WinMM MIDI input visible: " + _deviceName);
+                return;
+            }
+            Thread.Sleep(150);
+        } while (elapsed.Elapsed < TimeSpan.FromSeconds(6));
+        throw new IOException(Ui.T("Виртуальное устройство открыто, но Windows не опубликовала MIDI-вход FocGrain для FC2. Повторная проверка не пересоздаёт порт. Подробнее: «Восстановление Windows MIDI».",
+            "The virtual device is open, but Windows has not published the FocGrain MIDI input for FC2. Retry checks visibility without recreating the port. See Windows MIDI recovery."));
     }
 
     public void SendGain(int analogInput, int value)

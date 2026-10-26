@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0 · 2026-10-26
+
+- First accepted stable release: the owner confirms hardware gain MIN/MAX switching by tray click on Scarlett 4i4 4th Gen.
+- Record exact Windows, FC2, Focusrite driver, MIDI and runtime versions in both READMEs and TESTED_SETUP.md.
+- Replace the provisional port/FC2 status with Ready to control gain in RU/EN; retain actual MIDI error handling and send-only state semantics.
+
+
 ## 0.4.0 · 2026-10-25
 
 - Add a separate four-step RU/EN FC2 setup wizard using the user's two real screenshots, with enlarge view and explicit pickup-off instructions.
@@ -41,3 +48,22 @@ Application compilation and physical-interface acceptance status are recorded in
 - Исправлены размеры и выравнивание кнопок настроек; добавлен автозапуск Windows, выключенный по умолчанию.
 - Setup/удаление закрывают процессы только из выбранной папки: обычный выход и ограниченный принудительный fallback.
 - Удаление очищает автозапуск и данные текущего пользователя; размер лога ограничен.
+
+## 0.5.1
+
+- MIN: серая точка и приглушённые акценты. MAX: более яркий оранжевый цвет.
+- Основной README на английском, русский доступен по ссылке; ссылки установщика обновлены.
+
+## 1.0.1 · 2026-10-26
+
+- Add cancellable logon delay, bounded startup retries for returned failures and a 30-second connect deadline. Never retry a still-running native call or send startup gain.
+- Log generated association/device identity; document the read-only Preview 11 association and FC2 reselection.
+- Replace restart-app-only timeout advice with Windows MIDI recovery guidance and the upstream transport defect.
+- Add four meaningful startup regression scenarios (18 total).
+
+## 1.0.2 · 2026-10-26
+
+- Enforce one machine-wide MIDI owner before starting tray or MIDI smoke mode; retain the legacy session mutex to block older versions. Duplicate launch activates the existing instance.
+- Confirm WinMM input visibility before showing Ready; recheck an already opened endpoint without recreation.
+- Add PID/session logging and a read-only WinMM inventory script.
+- Correct the earlier association-id explanation: ProductInstanceId identifies the Windows device.

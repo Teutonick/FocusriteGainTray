@@ -84,7 +84,7 @@ internal static class Log
             if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
                 File.Move(path, path + ".previous", overwrite: true);
             File.AppendAllText(path,
-                $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+                $"[{DateTimeOffset.Now:O}] [PID {Environment.ProcessId}] {message}{Environment.NewLine}");
         }
         catch { /* logging must never crash audio control */ }
     }

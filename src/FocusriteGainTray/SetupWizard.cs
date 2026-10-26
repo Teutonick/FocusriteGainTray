@@ -41,7 +41,7 @@ internal sealed class SetupWizard : Form
         imagePanel.Controls.Add(_picture, 0, 0); imagePanel.Controls.Add(_caption, 0, 1);
         content.Controls.Add(_instructions, 0, 0); content.Controls.Add(imagePanel, 1, 0);
         layout.Controls.Add(content, 0, 3);
-        layout.Controls.Add(new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 8), Text = Ui.T("Настройки FC2 меняются вручную. Мастер не отправляет команды и не подтверждает состояние устройства.", "Change FC2 settings manually. The wizard sends no commands and does not verify hardware state.") }, 0, 4);
+        layout.Controls.Add(new Label { AutoSize = true, Dock = DockStyle.Fill, Padding = new Padding(0, 12, 0, 8), Text = Ui.T("Настройки FC2 меняются вручную. Мастер не отправляет команды gain.", "Change FC2 settings manually. The wizard sends no gain commands.") }, 0, 4);
         var footer = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2 };
         footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         var enlarge = new Button { AutoSize = true, Text = Ui.T("Увеличить снимок", "Enlarge screenshot"), Anchor = AnchorStyles.Left };

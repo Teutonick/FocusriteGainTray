@@ -10,21 +10,23 @@ internal sealed class SetupRequestWindow : NativeWindow, IDisposable
     private static readonly uint MessageId = RegisterWindowMessage(Caption);
     private readonly Action _show;
     private readonly Action _close;
-    public SetupRequestWindow(Action show, Action close)
+    private readonly Action _activate;
+    public SetupRequestWindow(Action show, Action close, Action? activate = null)
     {
         _show = show;
         _close = close;
+        _activate = activate ?? (() => { });
         CreateHandle(new CreateParams { Caption = Caption });
     }
-    public static bool SignalExisting()
+    public static bool SignalExisting(bool showSetup = true)
     {
         var window = FindWindow(null, Caption);
-        return MessageId != 0 && window != IntPtr.Zero && PostMessage(window, MessageId, IntPtr.Zero, IntPtr.Zero);
+        return MessageId != 0 && window != IntPtr.Zero && PostMessage(window, MessageId, showSetup ? new IntPtr(1) : IntPtr.Zero, IntPtr.Zero);
     }
     protected override void WndProc(ref Message message)
     {
         if (message.Msg == 0x10) { _close(); return; }
-        if (MessageId != 0 && message.Msg == MessageId) { _show(); return; }
+        if (MessageId != 0 && message.Msg == MessageId) { if (message.WParam != IntPtr.Zero) _show(); else _activate(); return; }
         base.WndProc(ref message);
     }
     public static void RequestClose(int processId)

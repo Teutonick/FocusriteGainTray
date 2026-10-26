@@ -1,93 +1,59 @@
-# FocGrain · независимый проект
+# FocGrain
 
-<img src="assets/FocGrain.png" width="96" alt="FocGrain gain dial">
+[Русский](README.ru.md)
 
-[English](README.en.md)
+A small independent Windows tray app for switching a supported audio input between two gain presets. Choose Analog 1 or 2, set minimum/maximum MIDI values, and left-click the tray icon to toggle. Right-click for settings, MIDI connection controls, updates and Quit.
 
-**Минимум ↔ максимум gain одним кликом из системного трея Windows.**
+FocGrain uses documented Focusrite Control 2 MIDI commands. It is not made, sponsored or endorsed by Focusrite. Focusrite, Scarlett and Focusrite Control 2 identify compatibility and belong to their respective owners. The original FocGrain icon is independent artwork; user-supplied FC2 screenshots illustrate setup, and rights to the depicted vendor UI/marks remain with their owners.
 
-Выберите аудиовход, задайте два значения и переключайте их левой кнопкой по значку. Правая кнопка открывает меню с настройками и выходом. Приложение управляет аппаратным gain через документированные MIDI-команды Focusrite Control 2.
+## First stable release — verified setup
 
-Это независимый проект сообщества, не официальный продукт Focusrite и не одобренный компанией инструмент. Focusrite, Scarlett и Focusrite Control 2 — обозначения их соответствующих правообладателей; здесь они служат для описания совместимости. Иконка FocGrain оригинальная; предоставленные пользователем снимки FC2 используются для инструкции. Права на показанный интерфейс и обозначения Focusrite сохраняются за правообладателями.
+**1.0.0 is the first accepted release.** The owner confirmed that clicking the tray icon switches the selected input gain between the configured MIN and MAX values.
 
-> Статус: прототип. Release-сборка проверена с .NET SDK 10.0.402; 14 сценариев тестов модели проходят. Пользователь подтвердил переключение gain при выключенном Enable pickup; полный аппаратный регресс не выполнен. Не используйте как гарантированное средство отключения микрофона.
+| Component | Verified version |
+| --- | --- |
+| Interface | Scarlett 4i4 4th Gen |
+| Windows | Windows 11 Pro 26H2 x64, **26300.9711** |
+| Focusrite Control 2 | **1.1210.0.0** |
+| Focusrite Audio Drivers | **4.150.0.432** |
+| Windows MIDI Services binary | **10.0.26100.8875** |
+| App-local MIDI SDK | **0.99.92-preview.11**, DLL **1.0.16.0** |
+| Visual C++ x64 / bundled .NET | **14.51.36247.00** / **10.0.13** |
 
-## Что умеет
+FC2: select **FocGrain**, channel **1 / All channels**, and turn **Enable pickup OFF**. [Full setup and acceptance record](docs/TESTED_SETUP.md).
 
-- Один процесс в системном трее, без постоянно открытого окна.
-- Отдельный [мастер настройки FC2 со скриншотами](docs/FC2_SETUP.md): после установки, из трея, настроек и меню «Пуск».
-- Русский/английский интерфейс и setup: язык Windows, для остальных языков — английский.
-- Версия и кнопка **«Проверить обновления…»** в меню трея и настройках. Проверка опубликованных GitHub Releases по запросу, без автоматической установки.
-- Выбор Analog 1 или Analog 2 в настройках; отдельные минимум и максимум для каждого входа.
-- Левый клик переключает минимум и максимум. Первый клик после подключения отправляет настроенный максимум.
-- Значок регулятора и отметка **− / +** различают MIN/MAX; цвет и положение указателя дополняют знак. Подсказка показывает MIN, MAX, MID, неизвестное состояние или ошибку MIDI.
-- Правый клик: настройки, выбор входа, пресеты, шаг регулировки, переподключение MIDI, лог, выход.
-- Горячие клавиши: `Ctrl+Alt+M` — переключить, `Ctrl+Alt+Up/Down` — изменить на шаг. Настраиваются в окне настроек.
-- Запуск, сохранение настроек и выбор входа сами по себе не отправляют gain. После переподключения состояние снова неизвестно.
+## Install and use
 
-Значок отражает **последнюю успешно отправленную команду**, а не измеренный gain: обратного чтения аппаратного состояния нет. Успешная отправка не доказывает, что Focusrite Control 2 принял команду. Если изменить ручку в другой программе, значок об этом не узнает.
+1. Run **FocGrain-1.0.2-Setup-x64.exe** on Windows 11 25H2 x64 (build 26200+).
+2. Setup checks Visual C++ x64, Windows MIDI Services, Virtual Device App Transport, FC2 and driver-package registration. .NET is included.
+3. If required, use the wizard to download the verified official Visual C++ or FC2 installer. Vendor license/driver/restart choices remain interactive. System MIDI components come through Windows Update; the wizard links to it and rechecks readiness.
+4. Use the separate [screenshot setup wizard](docs/FC2_SETUP.en.md) at the end of setup, from the tray/Settings, or its Start menu shortcut. Start FocGrain. In FC2, select **More options → Preferences → Application → MIDI Control: FocGrain**, channel 1 or All channels. **Turn OFF Enable pickup**; otherwise preset changes may be ignored.
+5. Open FocGrain Settings from the tray, select the correct input and deliberately choose low test values before checking the physical gain knob.
 
-## Совместимость и установка
+Russian and English follow the Windows UI language. Any other language defaults to English. Setup is currently unsigned. Closing or saving Settings does not send gain commands; starting the app does not restore or send a gain value. Autostart is disabled by default and can be enabled in Settings.
 
-Целевая конфигурация: Windows 11 25H2 x64, build 26200+, Windows MIDI Services с app-hosted Virtual Device Transport и API Preview 11. Проект закрепляет `Windows.Devices.Midi2` **0.99.92-preview.11**. Для сборки нужен SDK .NET 10 (одного runtime недостаточно).
+The gray dot and subdued pointer identify MIN; the bright orange plus/high pointer identifies MAX. MIN is a gain preset, not a disconnected or muted input. Hover for the last command sent. The first click after connection selects the configured maximum. `Ctrl+Alt+M` toggles presets; `Ctrl+Alt+Up/Down` adjusts by the configured step. Shortcuts are configurable.
 
-Нужны Focusrite Control 2 с MIDI Control и интерфейс, у которого приложение действительно предоставляет MIDI gain. Цель текущего прототипа — Scarlett 4i4 с управляемым gain Analog 1/2. Совместимость всех моделей и поколений Scarlett не заявляется. [Официальная таблица MIDI](https://support.focusrite.com/hc/en-gb/articles/38789425032594-Controlling-Focusrite-Control-2-via-MIDI) указывает CC12/CC13; доступность параметров зависит от модели.
+**MIDI 0–127 is not dB. Minimum gain is not mute.** There is no hardware gain readback: changing gain elsewhere does not update FocGrain. Current scope is Analog 1/2 (CC12/13, MIDI channel 1); support depends on the actual interface model and FC2 capabilities. MIN/MAX gain switching is confirmed on the setup below.
 
-1. Запустите **FocGrain-0.5.0-Setup-x64.exe** и разрешите установку в запросе Windows.
-2. Примите MIT и прочитайте информацию о компонентах. На шаге **«Подготовка компонентов»** мастер проверит систему.
-3. Если отсутствует Visual C++ x64 или Focusrite Control 2 с драйвером, нажмите соответствующую кнопку. Мастер предложит загрузить проверенный установщик с официального сайта и откроет его окно. При необходимости перезагрузите Windows и снова запустите setup.
-4. Если недоступны MIDI Services или Virtual Device App Transport, нажмите **«Обновления Windows»**, установите обновления и повторите проверку. Эти компоненты поставляются Windows; Preview Transports их не заменяет.
-5. После успешной проверки установите FocGrain. В конце setup по умолчанию выбран запуск FocGrain с отдельным мастером настройки FC2; флажок можно снять. Автозагрузка Windows не включается.
-6. В Focusrite Control 2: **More options → Preferences → Application → MIDI Control → FocGrain**, MIDI Channel → 1 или All channels. **Снимите Enable pickup** — иначе переключение пресетов может игнорироваться.
-7. Правой кнопкой по значку → **Настройки**. Выберите вход и задайте минимум/максимум. Значения **0–127 — MIDI, не дБ и не проценты**. Начните с низких уровней и проверьте результат в FC2.
-8. Кликните значок левой кнопкой. Убедитесь, что изменился gain нужного физического входа.
+## Updates and MIDI problems
 
-Setup включает .NET, устанавливает приложение в Program Files и добавляет удаление через **Параметры → Приложения**. Его можно повторно запустить для обновления. Удаление FocGrain сохраняет пользовательские пресеты и не удаляет общие драйверы, FC2 или Visual C++. Интернет нужен только для отсутствующих загружаемых компонентов. Setup пока не подписан цифровым сертификатом.
+Use **Check for updates…** in the tray menu or Settings. FocGrain checks public published stable releases of [Teutonick/FocusriteGainTray](https://github.com/Teutonick/FocusriteGainTray/releases). It shows the current/new version and opens the release page only when requested. No background checks, credentials, automatic downloads or automatic installation. A Git tag without a published Release is not an update. A 404/offline/rate-limit result is not reported as “up to date”.
 
-Подробнее: [установщик и зависимости](docs/INSTALLER.md).
+MIDI calls run on one background MTA worker with bounded waits. No delayed click/hotkey commands are queued. After a native-call timeout, state becomes unknown and retries are blocked until app restart; Quit waits at most two seconds for native cleanup. This protects FocGrain UI responsiveness but cannot repair a deadlocked Windows MIDI service or guarantee FC2 responsiveness. Update Windows and review [MIDI troubleshooting](docs/TESTING.md). Shared-service restart interrupts other MIDI clients and must be an operator decision.
 
-Минимальный gain **не равен mute** и не гарантирует тишину. Встроенные 0/40 — начальные MIDI-значения интерфейса, не универсальная рекомендация. Вы сами выбираете подходящие уровни.
+Presets/log: `%LOCALAPPDATA%\FocusriteGainTray`. Uninstall removes presets, logs and the startup entry for the current user; shared FC2/drivers/Visual C++ remain installed. No Razer Synapse, AutoHotkey, loopMIDI, private USB protocol or Windows microphone-volume substitution.
 
-Без Razer Synapse, AutoHotkey, loopMIDI, дополнительного стороннего MIDI-драйвера или подмены gain громкостью микрофона Windows. Focusrite Control 2 и системный MIDI Services остаются необходимыми компонентами.
+## Build and license
 
-## Если не работает
+.NET 10 SDK and Inno Setup 6.7.3 are required to build setup. Run `./scripts/Prepare-MidiSdk.ps1`, `dotnet run --project tests/GainTray.Tests`, then `./scripts/Build-Setup.ps1`. [Installer](docs/INSTALLER.md), [architecture](docs/PROJECT.md), [validation](docs/TESTING.md), [release/version process](docs/RELEASING.md), [audit](docs/AUDIT.md).
 
-- Нет MIDI-порта в FC2: запустите FocGrain раньше FC2, перезапустите FC2, проверьте службу и Virtual Device Transport официальными инструментами [Windows MIDI Services](https://microsoft.github.io/MIDI/). Видимость legacy WinMM требует отдельной проверки.
-- Значок `!`: проверьте MIDI Services, затем **Подключить MIDI**.
-- Gain не меняется: проверьте MIDI Control, канал 1, выбранный Analog-вход и поддержку модели.
-- Хоткей занят: выберите другую комбинацию.
-- Настройки и лог: `%LOCALAPPDATA%\FocusriteGainTray\settings.json` и `application.log`. При выходе приложение освобождает соединение; исчезновение виртуального порта нужно проверить на целевой системе.
+Project source and original icon assets are [MIT licensed](LICENSE): use, modify, redistribute and sell copies while retaining the copyright and license notice. MIT does not grant rights to third-party trademarks, FC2, drivers or Microsoft components. [Dependency and Preview redistribution terms](THIRD_PARTY_NOTICES.md) remain applicable.
 
-## Если FC2 и MIDI зависали
+Provided **AS IS**, without warranty. To the extent permitted by applicable law, authors are not liable for damage, interrupted recording, data loss or other consequences. Full warranty/liability terms are in LICENSE. Lower monitoring levels before testing gain; this is not hearing protection or a guaranteed microphone mute.
 
-Нативные MIDI-вызовы теперь выполняются последовательно в отдельном MTA-потоке. Подключение ограничено 10 секундами, отправка/отключение — 3 секундами, ожидание выхода — 2 секундами. После таймаута состояние сбрасывается, повторы блокируются до перезапуска FocGrain; клики и хоткеи не копятся для отложенной отправки.
+Windows startup is opt-in in Settings and disabled by default. Setup offers to close FocGrain before upgrading. Uninstall removes the current user's settings, logs and startup entry; shared Windows/Focusrite components remain installed.
 
-На этом ПК диагностический тест воспроизвёл блокировку системного вызова создания устройства. Отключение Enable pickup устранило подтверждённый пользователем случай непереключения gain; это отдельный вопрос от незавершённой диагностики нативного cleanup. Для зависаний: в Windows MIDI Services есть [описанные Microsoft проблемы перечисления WinMM-портов](https://github.com/microsoft/MIDI/issues/939). Установите обновления Windows; если MIDI-служба уже зависла, ей может потребоваться перезапуск или перезагрузка Windows. Не меняйте Legacy API Mode наугад и не устанавливайте сторонние MIDI-мосты. Новые логи показывают фазу подключения.
+### Port missing after restart or upgrade
 
-## Разработка и проверки
-
-```powershell
-./scripts/Prepare-MidiSdk.ps1
-dotnet restore src/FocusriteGainTray/FocusriteGainTray.csproj
-dotnet build src/FocusriteGainTray/FocusriteGainTray.csproj -c Release --no-restore
-dotnet run --project tests/GainTray.Tests
-dotnet run --project src/FocusriteGainTray
-# Сборка setup (.NET 10 SDK + Inno Setup 6.7.3):
-./scripts/Build-Setup.ps1
-```
-
-Скрипт получает закреплённый NuGet из официального GitHub-релиза Microsoft: в nuget.org этот пакет отсутствует. Бинарник SDK хранится только в игнорируемой `.work/feed`, не в исходниках.
-
-Тестовый исполняемый проект без стороннего test framework возвращает ненулевой exit code при ошибке. Он использует настоящие исходники модели и проверяет переключение, границы MIDI, независимость входов, сброс состояния и настройки. Он не запускает MIDI и не отправляет команды на устройство. CI собирает Windows-приложение отдельно.
-
-[Архитектура и требования](docs/PROJECT.md) · [Проверки и аппаратная приёмка](docs/TESTING.md) · [Правила изменений](CONTRIBUTING.md) · [Права и зависимости](THIRD_PARTY_NOTICES.md) · [Результат проверки](docs/AUDIT.md) · [Версии и GitHub Releases](docs/RELEASING.md).
-
-## Свободное использование и ответственность
-
-Исходный код проекта распространяется по [MIT](LICENSE): можно использовать, изучать, изменять, распространять, сублицензировать и продавать копии, сохраняя уведомление об авторских правах и текст разрешения в копиях или существенных частях ПО. Коммерческое использование разрешено.
-
-MIT относится к коду этого проекта. Она не предоставляет права на чужие товарные знаки, Focusrite Control 2, драйверы, Windows или Preview SDK. Не выдавайте свою сборку за официальный продукт Focusrite. Условия зависимостей проверяются отдельно перед распространением бинарников.
-
-Программа предоставляется **«как есть»**, без гарантий работоспособности, пригодности для конкретной цели и ненарушения прав. В пределах, допускаемых применимым законодательством, авторы не отвечают за ущерб, потерю данных, сбои записи и другие последствия использования. Полный текст отказа от гарантий и ответственности находится в MIT. Уменьшите уровень мониторинга перед проверкой gain; приложение не является средством защиты слуха или гарантированного mute.
-
-Автозапуск Windows включается в настройках и по умолчанию выключен. При обновлении установщик предлагает закрыть FocGrain. Удаление очищает настройки и логи текущего пользователя; [подробности очистки](docs/INSTALLER.md).
+Start FocGrain before FC2, wait for readiness, then select FocGrain again if FC2 shows No device. The device identifier uses the stable ProductInstanceId; FC2 selection may need restoring if a port disappears during recreation. At logon FocGrain waits 15 seconds and retries returned startup errors; a native timeout stops retries. [MIDI recovery and Windows transport issue](docs/MIDI_RECOVERY.en.md). To refresh an older enabled startup entry, open Settings and Save once.

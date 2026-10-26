@@ -98,7 +98,7 @@ internal sealed class SettingsDialog : Form
                     DecreaseHotkey = _decrease.Text,
                 };
                 updated.Validate();
-                if (startup.Checked != startupInitiallyEnabled) StartupRegistration.SetEnabled(startup.Checked);
+                if (startup.Checked || startup.Checked != startupInitiallyEnabled) StartupRegistration.SetEnabled(startup.Checked);
                 ResultSettings = updated;
                 DialogResult = DialogResult.OK;
                 Close();

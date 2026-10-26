@@ -40,7 +40,7 @@ if ($LASTEXITCODE) { throw "dotnet publish failed: $LASTEXITCODE" }
 foreach ($file in @('FocGrain.exe', 'coreclr.dll', 'hostfxr.dll', 'Windows.Devices.Midi2.dll', 'Windows.Devices.Midi2.pri')) {
     if (!(Test-Path (Join-Path $payload $file))) { throw "Incomplete self-contained payload: $file" }
 }
-foreach ($file in @('LICENSE','README.md','README.en.md','THIRD_PARTY_NOTICES.md','CHANGELOG.md')) {
+foreach ($file in @('LICENSE','README.md','README.ru.md','THIRD_PARTY_NOTICES.md','CHANGELOG.md')) {
     Copy-Item (Join-Path $root $file) $payload
 }
 Copy-Item (Join-Path $root 'docs') (Join-Path $payload 'docs') -Recurse -Force

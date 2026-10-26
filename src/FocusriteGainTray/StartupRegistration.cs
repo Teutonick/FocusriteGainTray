@@ -17,7 +17,7 @@ internal static class StartupRegistration
     public static void SetEnabled(bool enabled)
     {
         using var key = Registry.CurrentUser.CreateSubKey(Key);
-        if (enabled) key.SetValue("FocGrain", $"\"{Environment.ProcessPath}\"");
+        if (enabled) key.SetValue("FocGrain", $"\"{Environment.ProcessPath}\" --autostart");
         else key.DeleteValue("FocGrain", false);
     }
 }

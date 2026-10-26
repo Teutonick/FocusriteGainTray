@@ -8,5 +8,8 @@
     <Compile Include="../../src/FocusriteGainTray/Updates.cs" Link="Updates.cs" />
     <Compile Include="../../src/FocusriteGainTray/BoundedWorker.cs" Link="BoundedWorker.cs" />
     <Compile Include="../../src/FocusriteGainTray/SetupGuide.cs" Link="SetupGuide.cs" />
+    <Compile Include="../../src/FocusriteGainTray/MidiStartup.cs" Link="MidiStartup.cs" />
+    <Compile Include="../../src/FocusriteGainTray/SingleInstance.cs" Link="SingleInstance.cs" />
+    <Compile Include="../../src/FocusriteGainTray/LegacyMidiInputs.cs" Link="LegacyMidiInputs.cs" />
   </ItemGroup>
 </Project>

@@ -74,8 +74,8 @@ Name: "{group}\{cm:SetupWizard}"; Filename: "{app}\FocGrain.exe"; Parameters: "-
 Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; Description: "{cm:LaunchApp}"; Flags: postinstall skipifsilent runasoriginaluser
 
 [CustomMessages]
-english.GuideFile=README.en.md
-russian.GuideFile=README.md
+english.GuideFile=README.md
+russian.GuideFile=README.ru.md
 english.Guide=FocGrain guide
 russian.Guide=Инструкция FocGrain
 english.UninstallApp=Uninstall FocGrain

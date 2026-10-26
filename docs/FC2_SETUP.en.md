@@ -20,7 +20,7 @@ Pickup ignores MIDI until the incoming controller value matches the current FC2 
 
 Numbers above the vertical meters show input signal level, not the gain setting. **MIDI values 0–127 are not dB. Minimum gain is not mute.** Use deliberately safe monitoring levels for the manual check.
 
-The tray status **FocGrain port open** confirms only the application's own virtual port, not FC2 receipt or hardware gain. Retry opening the port is offered only when it is not open; no connection button is needed during normal operation.
+The tray status **Ready to control gain** means FocGrain is ready to send your gain presets. Retry opening the port is offered only when it is not open; no connection button is needed during normal operation.
 
 The screenshots were supplied by the user for this guide. The depicted interface and Focusrite marks remain the property of their respective owners. FocGrain is an independent project, not a Focusrite product.
 

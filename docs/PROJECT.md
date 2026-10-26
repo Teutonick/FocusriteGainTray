@@ -6,7 +6,7 @@ FocGrain: single Windows tray process for toggling user-selected minimum/maximum
 
 ## Architecture
 
-- `Program`: STA message loop and single-instance mutex.
+- `Program`: STA message loop, machine-wide device-owner mutex and legacy session mutex.
 - `TrayApplicationContext`: UI commands, successful-send state and lifecycle.
 - `SettingsDialog`: selected input, ordered minimum/maximum, hotkeys.
 - `AppSettings`: JSON configuration, normalization and atomic file replacement.

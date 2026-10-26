@@ -46,7 +46,7 @@ When updating dependencies, download the official file separately, verify Authen
 - Publish/build and installer compilation are automated; an unsigned setup is expected until a signing certificate/workflow is configured.
 - `FocGrain.exe --check-prerequisites <absolute-report-path>` writes UTF-16 INI and returns the same code. This mode initializes no tray/hotkeys, writes no presets and creates no endpoint. It may ask the Windows service to become available.
 - An internal `PreviewOnly` compiler define disables all dependency installer execution and all app file installation, and uses lowest privilege solely for UI QA. That binary is generated under .work, not delivered as setup.
-- Fresh-machine dependency installation, network failure/cancel/hash-change, required reboot, actual upgrade/uninstall and physical Scarlett/FC2 acceptance must be tested on a disposable Windows 25H2 VM or target test system. A successful probe on an already prepared PC is not that regression.
+- Fresh-machine dependency installation, network failure/cancel/hash-change, required reboot, actual upgrade/uninstall should be exercised on a disposable Windows 25H2 VM or target test system. A successful probe on an already prepared PC is not that regression.
 
 ## Upstream
 
@@ -61,7 +61,7 @@ When updating dependencies, download the official file separately, verify Authen
 
 Original FocGrain artwork is embedded in the EXE and six tray states, settings/update windows, setup/uninstaller metadata, wizard small/large images and Start menu shortcuts. Multi-resolution ICO files cover 16, 20, 24, 32, 40, 48, 64, 128 and 256 pixels. Source artwork and deterministic Windows generation script are in assets/ and scripts/Generate-Icons.ps1. No Focusrite artwork is used.
 
-Setup lists English first, detects the Windows UI language and uses Russian only for Russian; unsupported languages use English. It does not persist a previous setup language. Native Inno strings, custom preparation/download messages and notices are bilingual. The setup passes its selected language into the temporary CLI probe. The guide shortcut selects README.en.md/README.md. The tray application uses the same ru/en fallback rule through CurrentUICulture, not number/date-format locale.
+Setup lists English first, detects the Windows UI language and uses Russian only for Russian; unsupported languages use English. It does not persist a previous setup language. Native Inno strings, custom preparation/download messages and notices are bilingual. The setup passes its selected language into the temporary CLI probe. The guide shortcut selects README.md/README.ru.md. The tray application uses the same ru/en fallback rule through CurrentUICulture, not number/date-format locale.
 
 The prerequisite memo scrolls instead of cutting off long diagnostics. Directory.Build.props supplies the default build version, UI/EXE metadata and setup name. Check for updates is an explicit application action against GitHub Releases; setup does not auto-publish a release or silently fetch a newer FocGrain version. See RELEASING.md.
 
@@ -79,4 +79,4 @@ The disabled connected-state Connect MIDI action was removed. The header now say
 
 При обновлении setup предлагает закрыть экземпляры из выбранной папки установки. Сначала отправляется запрос обычного выхода; через 5 секунд старый или зависший процесс завершается принудительно. Другие папки установки, Focusrite Control 2 и MIDI Services не затрагиваются. При удалении используется тот же механизм, удаляются файлы установки, ярлыки, запись автозапуска, настройки и логи текущего пользователя в %LOCALAPPDATA%\FocusriteGainTray. Настройки других учётных записей не удаляются. Общие компоненты Focusrite, Visual C++ и Windows остаются установленными.
 
-Выход скрывает и освобождает значок трея, освобождает горячие клавиши и окна, даёт MIDI SDK две секунды на закрытие. Зависший native-вызов выполняется на фоновом потоке и не должен удерживать процесс. Очистка виртуальных портов внутри Windows MIDI Services всё ещё зависит от preview SDK/службы: отсутствие оставшихся портов после реального выхода/удаления требует отдельной аппаратной проверки; остановку общей MIDI-службы установщик не выполняет. Лог ограничен текущим файлом около 1 МБ и одной предыдущей копией.
+Выход скрывает и освобождает значок трея, освобождает горячие клавиши и окна, даёт MIDI SDK две секунды на закрытие. Зависший native-вызов выполняется на фоновом потоке и не должен удерживать процесс. Виртуальные порты обслуживаются Windows MIDI Services; установщик не перезапускает общую MIDI-службу. История диагностики native cleanup сохранена в AUDIT.md. Лог ограничен текущим файлом около 1 МБ и одной предыдущей копией.

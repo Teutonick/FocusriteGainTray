@@ -62,11 +62,6 @@ internal static class Program
             else Application.Run(preview);
             return 0;
         }
-        if (args.Length == 2 && args[0] == "--midi-smoke")
-        {
-            try { return MidiSmoke.RunAsync(args[1]).GetAwaiter().GetResult(); }
-            catch { return 29; }
-        }
         // Setup invokes this before installation; never initialize tray, hotkeys or MIDI output.
         if ((args.Length == 2 || (args.Length == 4 && args[2] == "--language" && args[3] is "en" or "ru")) && args[0] == "--check-prerequisites")
         {
@@ -75,18 +70,48 @@ internal static class Program
             catch { return PrerequisitePolicy.ProbeFailed; }
         }
         bool showSetup = args.Length == 1 && args[0] == "--setup";
-        if (args.Length != 0 && !showSetup) return 64;
-        using var mutex = new Mutex(initiallyOwned: true, name: @"Local\FocusriteGainTray", out bool firstInstance);
-        if (!firstInstance)
+        bool atLogon = args.Length == 1 && args[0] == "--autostart";
+        bool smoke = args.Length == 2 && args[0] == "--midi-smoke";
+        bool instanceTest = args.Length == 2 && args[0] == "--instance-test-host";
+        if (args.Length != 0 && !showSetup && !atLogon && !smoke && !instanceTest) return 64;
+        SingleInstance? instance;
+        bool acquired;
+        if (instanceTest)
         {
-            if (showSetup && SetupRequestWindow.SignalExisting()) return 0;
-            MessageBox.Show(Ui.T("FocGrain уже запущен в трее.", "FocGrain is already running in the system tray."), "FocGrain",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // Two-process QA uses the same lock code with test-owned names and no MIDI.
+            string directory = Path.GetDirectoryName(Path.GetFullPath(args[1]))!;
+            string id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(directory)))[..24];
+            acquired = SingleInstance.TryAcquire(@"Global\FocGrain.Test." + id, @"Local\FocGrain.Test." + id, out instance);
+        }
+        else acquired = SingleInstance.TryAcquire(out instance);
+        if (!acquired)
+        {
+            if (instanceTest || smoke) return 73;
+            if (SetupRequestWindow.SignalExisting(showSetup)) return 0;
+            if (!atLogon) MessageBox.Show(Ui.T("FocGrain уже запущен или Windows запретила получение блокировки. Второй экземпляр не запускается.", "FocGrain is already running or Windows denied the instance lock. A second instance will not start."), "FocGrain", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 0;
+        }
+        using var owner = instance!;
+        if (!instanceTest) Log.Write($"Process started; session={System.Diagnostics.Process.GetCurrentProcess().SessionId}; mode={(atLogon ? "autostart" : showSetup ? "setup" : smoke ? "smoke" : "tray")}");
+        if (smoke)
+        {
+            try { return MidiSmoke.RunAsync(args[1]).GetAwaiter().GetResult(); }
+            catch { return 29; }
+        }
+        if (instanceTest)
+        {
+            ApplicationConfiguration.Initialize();
+            using var context = new ApplicationContext();
+            using var window = new SetupRequestWindow(() => { }, () => context.ExitThread());
+            File.WriteAllText(args[1], "ready");
+            Application.Run(context);
             return 0;
         }
 
         ApplicationConfiguration.Initialize();
-        Application.Run(new TrayApplicationContext(showSetup));
+        // Existing pre-1.0.1 Run entries have no --autostart switch. Cover their
+        // early-boot launch too, without changing the user's startup preference.
+        Application.Run(new TrayApplicationContext(showSetup, atLogon || Environment.TickCount64 < 120_000));
         return 0;
     }
 }

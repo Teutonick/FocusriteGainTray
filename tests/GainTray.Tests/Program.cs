@@ -127,6 +127,54 @@ Check("FC2 wizard includes mandatory pickup guidance in both languages", () => {
         }
     } finally { Ui.Initialize(before); }
 });
+Check("logon waits for MIDI and returned startup failures retry without sending gain", () => {
+    var events = new List<string>(); int attempts = 0;
+    MidiStartup.RunAsync(true, () => { events.Add("connect"); return Task.FromResult(++attempts == 3); },
+        () => false, () => false, duration => { events.Add($"wait:{duration.TotalSeconds}"); return Task.CompletedTask; }).GetAwaiter().GetResult();
+    Equal("wait:15,connect,wait:5,connect,wait:5,connect", string.Join(',',events));
+});
+Check("native timeout stops startup attempts immediately", () => {
+    int attempts = 0, delays = 0; bool faulted = false;
+    MidiStartup.RunAsync(false, () => { attempts++; faulted = true; return Task.FromResult(false); },
+        () => faulted, () => false, _ => { delays++; return Task.CompletedTask; }).GetAwaiter().GetResult();
+    Equal(1,attempts); Equal(0,delays);
+});
+Check("startup is bounded and successful connect stops retries", () => {
+    foreach(bool success in new[]{false,true}) {
+        int attempts = 0;
+        MidiStartup.RunAsync(false, () => { attempts++; return Task.FromResult(success); },
+            () => false, () => false, _ => Task.CompletedTask).GetAwaiter().GetResult();
+        Equal(success ? 1 : 3,attempts);
+    }
+});
+Check("quit during startup delay creates no port", () => {
+    bool closing = false;
+    MidiStartup.RunAsync(true, () => throw new Exception("Connect ran after quit"), () => false, () => closing,
+        _ => { closing = true; return Task.CompletedTask; }).GetAwaiter().GetResult();
+});
+Check("single instance excludes a second owner and releases on quit", () => {
+    string id=Guid.NewGuid().ToString("N"), machine=@"Global\FocGrain.Test."+id, legacy=@"Local\FocGrain.Test."+id;
+    Equal(true,SingleInstance.TryAcquire(machine,legacy,out var first));
+    try { Equal(false,SingleInstance.TryAcquire(machine,legacy,out var duplicate)); Equal<SingleInstance?>(null,duplicate); }
+    finally { first!.Dispose(); }
+    Equal(true,SingleInstance.TryAcquire(machine,legacy,out var next)); next!.Dispose();
+});
+Check("legacy process blocks new owner without stranding the machine lock", () => {
+    string id=Guid.NewGuid().ToString("N"), machine=@"Global\FocGrain.Test."+id, legacy=@"Local\FocGrain.Test."+id;
+    using(var oldVersion = new Mutex(true,legacy)) {
+        Equal(false,SingleInstance.TryAcquire(machine,legacy,out var duplicate));
+        Equal<SingleInstance?>(null,duplicate);
+        oldVersion.ReleaseMutex();
+    }
+    Equal(true,SingleInstance.TryAcquire(machine,legacy,out var next)); next!.Dispose();
+});
+Check("WinMM input matching does not accept QA or unrelated ports", () => {
+    Equal(true,LegacyMidiInputs.Matches("FocGrain","FocGrain"));
+    Equal(true,LegacyMidiInputs.Matches("FocGrain (Virtual MIDI Device)","FocGrain"));
+    Equal(false,LegacyMidiInputs.Matches("FocGrain QA","FocGrain"));
+    Equal(false,LegacyMidiInputs.Matches("Focusrite USB MIDI","FocGrain"));
+    Equal(false,LegacyMidiInputs.Matches("FocGrain","FocGrain QA"));
+});
 Console.WriteLine($"{passed} scenarios passed");
 
 sealed class FakeMidi : IDisposable {

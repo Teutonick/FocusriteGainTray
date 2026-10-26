@@ -1,6 +1,6 @@
 # Versions and releases
 
-`Directory.Build.props` is the version source (currently 0.5.0). The EXE file/assembly metadata, UI version labels and default setup filename use it. Build-Setup.ps1 accepts an explicit major.minor.patch override for a deliberate custom build and checks tag/version agreement if run in a tag context. No commit, tag, release or remote publication is performed by the build script.
+`Directory.Build.props` is the version source (currently 1.0.2). The EXE file/assembly metadata, UI version labels and default setup filename use it. Build-Setup.ps1 accepts an explicit major.minor.patch override for a deliberate custom build and checks tag/version agreement if run in a tag context. No commit, tag, release or remote publication is performed by the build script.
 
 ## Maintainer release procedure
 

@@ -22,7 +22,7 @@ function Draw-Mark([string]$mode) {
     $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
     $g.DrawArc($pen,52,46,152,152,135,270); $pen.Dispose()
     $angle = switch ($mode) { 'min' {135} 'max' {405} 'mid' {270} default {315} }
-    $color = switch ($mode) { 'max' {'#ffbd69'} 'error' {'#ff7584'} 'unknown' {'#8ba2bc'} default {'#39dfc4'} }
+    $color = switch ($mode) { 'min' {'#92979f'} 'max' {'#ff850a'} 'error' {'#ff7584'} 'unknown' {'#8ba2bc'} default {'#39dfc4'} }
     $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($color),15)
     $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
     $g.DrawArc($pen,52,46,152,152,135,[single][Math]::Max(1,($angle-135))); $pen.Dispose()
@@ -30,19 +30,21 @@ function Draw-Mark([string]$mode) {
     $g.FillEllipse($fill,80,74,96,96); $fill.Dispose()
     $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#425c79'),3)
     $g.DrawEllipse($pen,80,74,96,96); $pen.Dispose()
-    $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#f1f9ff'),10)
+    $pointerColor = if ($mode -eq 'min') { '#92979f' } else { '#f1f9ff' }
+    $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($pointerColor),10)
     $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
     $radians = $angle * [Math]::PI / 180
     $g.DrawLine($pen,128,122,[single](128+41*[Math]::Cos($radians)),[single](122+41*[Math]::Sin($radians))); $pen.Dispose()
     foreach ($segment in @(@(65,'#39dfc4'),@(139,'#ffbd69'))) {
-        $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($segment[1]),13)
+        $segmentColor = if ($mode -in @('min','max')) { $color } else { $segment[1] }
+        $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($segmentColor),13)
         $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
         $g.DrawLine($pen,[single]($segment[0]+6),213,[single]($segment[0]+46),213);$pen.Dispose()
     }
     if ($mode -ne 'app') {
         $fill = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml($color))
         $g.FillEllipse($fill,164,166,74,74);$fill.Dispose()
-        $text = switch ($mode) { 'min' {'−'} 'max' {'+'} 'error' {'!'} 'unknown' {'?'} default {'•'} }
+        $text = switch ($mode) { 'min' {''} 'max' {'+'} 'error' {'!'} 'unknown' {'?'} default {'•'} }
         $font = [Drawing.Font]::new('Segoe UI',43,[Drawing.FontStyle]::Bold,[Drawing.GraphicsUnit]::Pixel)
         $format=[Drawing.StringFormat]::new();$format.Alignment=$format.LineAlignment=[Drawing.StringAlignment]::Center
         $fill=[Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#0b1425'))
