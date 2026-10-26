@@ -11,5 +11,7 @@
     <Compile Include="../../src/FocusriteGainTray/MidiStartup.cs" Link="MidiStartup.cs" />
     <Compile Include="../../src/FocusriteGainTray/SingleInstance.cs" Link="SingleInstance.cs" />
     <Compile Include="../../src/FocusriteGainTray/LegacyMidiInputs.cs" Link="LegacyMidiInputs.cs" />
+    <Compile Include="../../src/FocusriteGainTray/Fc2Startup.cs" Link="Fc2Startup.cs" />
+    <Compile Include="../../src/FocusriteGainTray/MidiRecoveryPolicy.cs" Link="MidiRecoveryPolicy.cs" />
   </ItemGroup>
 </Project>

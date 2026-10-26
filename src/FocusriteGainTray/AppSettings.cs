@@ -18,6 +18,7 @@ public sealed class AppSettings
     public string ToggleHotkey { get; set; } = "Ctrl+Alt+M";
     public string IncreaseHotkey { get; set; } = "Ctrl+Alt+Up";
     public string DecreaseHotkey { get; set; } = "Ctrl+Alt+Down";
+    public bool StartFocusriteControl2 { get; set; } = true;
 
     public ChannelSettings Channel(int channel) => channel == 2 ? Input2 : Input1;
 

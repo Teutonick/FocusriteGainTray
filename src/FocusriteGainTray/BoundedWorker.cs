@@ -38,7 +38,7 @@ public sealed class BoundedWorker<T> where T : class, IDisposable
                 Interlocked.Exchange(ref _faulted, 1);
                 // Observe a late failure even though this request has already timed out.
                 _ = done.Task.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
-                throw new TimeoutException(Ui.T("MIDI-операция не завершилась вовремя. Состояние неизвестно. Перезапустите FocGrain и проверьте обновления Windows MIDI Services.", "The MIDI operation timed out. State is unknown. Restart FocGrain and check Windows MIDI Services updates."));
+                throw new TimeoutException(Ui.T("Windows MIDI Services не завершил операцию. Используйте «Восстановить MIDI без перезагрузки» в меню FocGrain.", "Windows MIDI Services did not finish the operation. Use Repair MIDI without restarting Windows in the FocGrain menu."));
             }
         }
         finally { Interlocked.Exchange(ref _inFlight, 0); }

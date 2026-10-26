@@ -175,12 +175,80 @@ Check("WinMM input matching does not accept QA or unrelated ports", () => {
     Equal(false,LegacyMidiInputs.Matches("Focusrite USB MIDI","FocGrain"));
     Equal(false,LegacyMidiInputs.Matches("FocGrain","FocGrain QA"));
 });
+Check("FC2 startup waits for MIDI and handles an existing instance without relaunch", () => {
+    int locates=0, launches=0;
+    var start = new Fc2Startup(() => { locates++; return "FC2.exe"; }, _ => true, _ => launches++);
+    Equal(Fc2StartupResult.WaitingForMidi,start.Run(true,false)); Equal(0,locates);
+    Equal(Fc2StartupResult.AlreadyRunning,start.Run(true,true)); Equal(0,launches);
+    Equal(Fc2StartupResult.AlreadyHandled,start.Run(true,true)); Equal(1,locates);
+});
+Check("FC2 startup launches only once after MIDI and respects opt out", () => {
+    var events = new List<string>();
+    var start = new Fc2Startup(() => { events.Add("locate"); return "installed FC2.exe"; }, path => { events.Add("check:"+path); return false; }, path => events.Add("launch:"+path));
+    Equal(Fc2StartupResult.Disabled,start.Run(false,true)); Equal(0,events.Count);
+    Equal(Fc2StartupResult.Started,start.Run(true,true));
+    Equal("locate,check:installed FC2.exe,launch:installed FC2.exe",string.Join(',',events));
+    Equal(Fc2StartupResult.AlreadyHandled,start.Run(true,true)); Equal(3,events.Count);
+});
+Check("missing FC2 and a launch failure remain retryable", () => {
+    string? path=null; int calls=0;
+    var start = new Fc2Startup(() => path, _ => false, _ => { if(++calls==1) throw new IOException("launch failed"); });
+    Equal(Fc2StartupResult.NotInstalled,start.Run(true,true));
+    path="FC2.exe";
+    try { start.Run(true,true); throw new Exception("Launch failure was swallowed"); } catch(IOException) { }
+    Equal(Fc2StartupResult.Started,start.Run(true,true)); Equal(2,calls);
+});
+Check("old settings gain FC2 startup while an explicit opt out survives JSON", () => {
+    var old=JsonSerializer.Deserialize<AppSettings>("{\"SelectedInput\":2}")!;
+    Equal(true,old.StartFocusriteControl2); Equal(2,old.SelectedInput);
+    old.StartFocusriteControl2=false;
+    Equal(false,JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(old))!.StartFocusriteControl2);
+});
+Check("upgrade distinguishes clean, dirty, forced and legacy shutdown", () => {
+    Equal(false,MidiRecoveryPolicy.NeedsRecovery(new(1,0,4),0,false));
+    Equal(true,MidiRecoveryPolicy.NeedsRecovery(new(1,0,3),0,false));
+    Equal(true,MidiRecoveryPolicy.NeedsRecovery(new(1,0,4),31,false));
+    Equal(true,MidiRecoveryPolicy.NeedsRecovery(new(1,0,4),-1,false));
+    Equal(true,MidiRecoveryPolicy.NeedsRecovery(new(1,0,4),0,true));
+});
+Check("forced service recovery refuses shared, wrong-image and changing ownership", () => {
+    var state = new MidiServiceState(3,123,true);
+    string expected=Path.GetFullPath("MidiSrv.exe");
+    Equal(true,MidiRecoveryPolicy.CanTerminate(state,expected,expected,new[]{"midisrv"}));
+    Equal(false,MidiRecoveryPolicy.CanTerminate(state with{OwnProcess=false},expected,expected,new[]{"midisrv"}));
+    Equal(false,MidiRecoveryPolicy.CanTerminate(state,expected,expected,new[]{"midisrv","other"}));
+    Equal(false,MidiRecoveryPolicy.CanTerminate(state,Path.GetFullPath("other.exe"),expected,new[]{"midisrv"}));
+    Equal(false,MidiRecoveryPolicy.CanTerminate(state with{State=4},expected,expected,new[]{"midisrv"}));
+    Equal(false,MidiRecoveryPolicy.CanTerminate(state with{ProcessId=0},expected,expected,new[]{"midisrv"}));
+});
+Check("service restart uses clean stop and reaches Running", () => {
+    var service=new FakeService(false);
+    MidiRecoveryPolicy.Restart(service,()=>{});
+    Equal("stop,start",string.Join(',',service.Calls)); Equal((uint)4,service.Query().State);
+});
+Check("stuck stop triggers verified fallback; unexpected state fails closed", () => {
+    var service=new FakeService(true);
+    MidiRecoveryPolicy.Restart(service,()=>{});
+    Equal("stop,verified-stop,start",string.Join(',',service.Calls));
+    var invalid=new FakeService(true){UnexpectedStop=true};
+    try { MidiRecoveryPolicy.Restart(invalid,()=>{}); throw new Exception("Unexpected state was terminated"); } catch(IOException) { }
+    Equal("stop",string.Join(',',invalid.Calls));
+});
 Console.WriteLine($"{passed} scenarios passed");
 
 sealed class FakeMidi : IDisposable {
     public int Created, Disposed;
     public List<int> Calls = new();
     public void Dispose() => Disposed=Environment.CurrentManagedThreadId;
+}
+sealed class FakeService(bool stuck) : IMidiServiceRecovery {
+    private uint _state=4;
+    public bool UnexpectedStop;
+    public List<string> Calls = new();
+    public MidiServiceState Query()=>new(_state,123,true);
+    public void Stop(){Calls.Add("stop");_state=UnexpectedStop?2u:stuck?3u:1u;}
+    public void TerminateVerifiedService(MidiServiceState state){Calls.Add("verified-stop");_state=1;}
+    public void Start(){Calls.Add("start");_state=4;}
 }
 sealed class FakeHttp(System.Net.HttpStatusCode status,string json) : HttpMessageHandler {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token) {

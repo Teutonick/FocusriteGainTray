@@ -14,6 +14,7 @@ FocGrain: single Windows tray process for toggling user-selected minimum/maximum
 - `WindowsMidiVirtualController`: official virtual transport and packet construction.
 - `PrerequisiteProbe` / `PrerequisitePolicy`: setup readiness detection and testable install gate; no endpoints or gain commands.
 - `HotkeyManager`: Windows RegisterHotKey lifecycle.
+- `Fc2Startup` / `FocusriteControl2`: start the installed FC2 application once after MIDI readiness, respect opt-out and an existing FC2 process; no gain capability or extra Windows startup entry.
 
 ## Invariants
 

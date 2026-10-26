@@ -1,30 +1,29 @@
-# Missing FocGrain port after startup or upgrade
+# Repair MIDI without restarting Windows
 
 [Русский](MIDI_RECOVERY.md)
 
-The virtual MIDI port exists while FocGrain is running. FC2 may reset its selection to **No device** when the port is recreated. Start FocGrain, wait for **Ready to control gain**, then open FC2 and select **FocGrain**, channel **1 / All channels**, with **Enable pickup OFF**. Reopen FC2 if its device list has not refreshed.
+## FocGrain 1.0.4+
 
-## Native creation/disconnect timeout
+Save work in MIDI applications, then choose **Repair MIDI without restarting Windows…** in the tray. Confirm the shared MIDI disconnection warning and UAC. Cancelling UAC changes no service.
 
-If the log stops at `CreateVirtualDevice` or `DisconnectEndpointConnection`, this is a system-port creation/teardown problem rather than FC2 pickup configuration.
+The old FocGrain process exits first. A one-shot elevated helper acquires exclusive MIDI ownership and restarts only **midisrv**. If normal stop stalls, it verifies Stop Pending, the exact **System32\MidiSrv.exe** image and exclusive service ownership before terminating that process. Shared, changed or unverified processes are refused.
 
-1. Save work in MIDI applications; quit FocGrain and FC2.
-2. Use **Start → Power → Restart**. Restart Windows, not just FocGrain; shutdown with Fast Startup is a different diagnostic step.
-3. Start FocGrain first, wait for readiness, then reopen FC2 and select FocGrain.
-4. If it recurs, check **Settings → Windows Update**. Do not randomly uninstall security updates or MIDI devices. Preserve application.log phases and Windows/MIDI versions for support.
+A normal, unelevated FocGrain process waits for successful recovery, then creates the port and checks WinMM. No gain is sent. Reopen FC2's MIDI list and select FocGrain if needed, channel 1 / All channels, Enable pickup OFF.
 
-Microsoft tracks a [similar virtual transport defect in #1047](https://github.com/microsoft/MIDI/issues/1047). A Microsoft maintainer stated on [21 October 2026 in #819](https://github.com/microsoft/MIDI/issues/819) that its fix was awaiting delivery. Similar symptoms are not proof of an identical root cause on this PC. Its previously collected VirtualMidiTransport DLL version is **1.0.15.0**, also present in that report.
+The helper installs no permanent service and does not terminate FC2, Focusrite drivers or unrelated services. It accepts no arbitrary service name, kill PID or executable path. Recovery is explicit, never an automatic startup action.
 
-Version 1.0.1 waits 15 seconds at logon/early Windows startup, allows up to 30 seconds to connect, and retries at most three returned failures. It never retries a hung native call, restarts the shared service, starts replacement native workers or sends gain during recovery.
+## Upgrade and uninstall
 
-## Device identity and WinMM visibility
+Version 1.0.4 returns **31** and records a current-user recovery marker after incomplete MIDI shutdown. The marker clears on successful recovery or a healthy new MIDI input. Older versions are treated conservatively because they did not report native cleanup status.
 
-Correction in 1.0.2: AssociationId links the virtual device sides; the Windows device identifier is built from ProductInstanceId, which FocGrain already keeps stable (FocusriteGainTray_Controller_01). A changing AssociationId alone does not prove changing device identity. This follows Microsoft MidiVirtualDeviceCreationConfig.cpp and Midi2.VirtualMidiEndpointManager.cpp.
+Interactive setup asks to recover the MIDI service before continuing an upgrade after dirty/legacy shutdown. Declining stops the upgrade before replacing files/launching the new app. Silent upgrade refuses this case and never resets a shared service. Uninstall can proceed without recovery if the user declines; the shared service remains untouched.
 
-Live inspection on 26 October found the FocGrain APPDEV software device with status OK, but no FocGrain WinMM input, both with normal and elevated permissions. FC2 therefore has no input to select. A Device Manager entry alone is insufficient.
+This is a controlled workaround for a Windows MIDI service hang, not a patch to Windows itself. Review application.log on refusal or recovery failure. A full Windows restart remains a fallback rather than the primary instruction.
 
-Version 1.0.2 waits for WinMM input visibility before reporting readiness, rechecks an already opened endpoint without recreating it, blocks a second process with machine-wide and legacy-session mutexes, and records PID/session in logs. Read-only enumeration is available with scripts/Inspect-MidiPorts.ps1; it does not open ports or send messages. Devices are not automatically removed.
+## Evidence
 
-## Observed recovery
+On 26 October, an OK FocGrain APPDEV node had no matching WinMM input. Exact software-node removal alone did not help. An authorized midisrv restart restored exactly one FocGrain input; see [audit](AUDIT.md) and [tested setup](TESTED_SETUP.md). ProductInstanceId identifies the Windows device; changing AssociationId alone does not establish changing device identity.
 
-On 26 October, exact APPDEV removal succeeded but did not restore the port alone. After a separately authorized midisrv restart, one FocGrain 1.0.2 process created the device and independent WinMM enumeration showed exactly one FocGrain input. A duplicate launch exited without a second owner. No gain commands or FC2/driver changes were made. This is a concrete recovery result, not an automatic service-restart feature or a permanent transport fix.
+Microsoft tracks a similar transport issue in [#1047](https://github.com/microsoft/MIDI/issues/1047) and [#819](https://github.com/microsoft/MIDI/issues/819). FocGrain does not replace Windows components or uninstall security updates.
+
+The compiled 1.0.4 helper was approved and exercised on this PC on 26 October: legacy shutdown returned 31, recovery returned 0, service Running and marker cleared. A normal process then created exactly one FocGrain WinMM input. No Windows reboot or gain commands were used.

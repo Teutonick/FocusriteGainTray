@@ -67,3 +67,16 @@ Application compilation and physical-interface acceptance status are recorded in
 - Confirm WinMM input visibility before showing Ready; recheck an already opened endpoint without recreation.
 - Add PID/session logging and a read-only WinMM inventory script.
 - Correct the earlier association-id explanation: ProductInstanceId identifies the Windows device.
+
+## 1.0.3 · 2026-10-26
+
+- Start the installed Focusrite Control 2 once after MIDI readiness, unless already running. Enabled by default with a separate opt-out checkbox.
+- Distinguish Focusrite Notifier from the actual MIDI-receiving FC2 application; keep Windows startup opt-in and send no startup gain.
+- Add four FC2-startup/settings scenarios (25 total) and extend the RU/EN settings layout.
+
+## 1.0.4 · 2026-10-26
+
+- Add explicit UAC MIDI-service recovery without reboot; close the old owner, verify and restart only midisrv, then relaunch with normal rights and no gain sends.
+- Record incomplete shutdown (exit 31 + marker). Setup gates dirty/legacy upgrades with a separate service-reset consent; silent installs never reset shared MIDI.
+- Verify Stop Pending, own-process service type, exact System32/MidiSrv.exe image and exclusive service ownership before forced fallback.
+- Add four recovery/upgrade policy scenarios (29 total), dirty-exit process testing and strict recovery CLI validation.

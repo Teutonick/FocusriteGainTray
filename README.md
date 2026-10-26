@@ -24,7 +24,7 @@ FC2: select **FocGrain**, channel **1 / All channels**, and turn **Enable pickup
 
 ## Install and use
 
-1. Run **FocGrain-1.0.2-Setup-x64.exe** on Windows 11 25H2 x64 (build 26200+).
+1. Run **FocGrain-1.0.4-Setup-x64.exe** on Windows 11 25H2 x64 (build 26200+).
 2. Setup checks Visual C++ x64, Windows MIDI Services, Virtual Device App Transport, FC2 and driver-package registration. .NET is included.
 3. If required, use the wizard to download the verified official Visual C++ or FC2 installer. Vendor license/driver/restart choices remain interactive. System MIDI components come through Windows Update; the wizard links to it and rechecks readiness.
 4. Use the separate [screenshot setup wizard](docs/FC2_SETUP.en.md) at the end of setup, from the tray/Settings, or its Start menu shortcut. Start FocGrain. In FC2, select **More options → Preferences → Application → MIDI Control: FocGrain**, channel 1 or All channels. **Turn OFF Enable pickup**; otherwise preset changes may be ignored.
@@ -57,3 +57,11 @@ Windows startup is opt-in in Settings and disabled by default. Setup offers to c
 ### Port missing after restart or upgrade
 
 Start FocGrain before FC2, wait for readiness, then select FocGrain again if FC2 shows No device. The device identifier uses the stable ProductInstanceId; FC2 selection may need restoring if a port disappears during recreation. At logon FocGrain waits 15 seconds and retries returned startup errors; a native timeout stops retries. [MIDI recovery and Windows transport issue](docs/MIDI_RECOVERY.en.md). To refresh an older enabled startup entry, open Settings and Save once.
+
+### FC2 must be running, not just its tray notifier
+
+The Focusrite Notifier tray utility is separate from Focusrite Control 2. Version 1.0.3 starts the installed FC2 application once after the MIDI input is ready, unless FC2 is already running. This is enabled by default and can be disabled with **Start FC2 after the MIDI port is ready** in Settings. It opens FC2 normally; no undocumented background switches, gain commands or extra Windows startup entries are used. Quitting FocGrain does not terminate FC2. Windows startup for FocGrain remains a separate opt-in setting.
+
+### MIDI recovery during upgrades
+
+From 1.0.4, use **Repair MIDI without restarting Windows…** in the tray. After explicit confirmation and UAC, a one-shot helper restarts only midisrv and relaunches FocGrain with normal rights. Other MIDI connections are temporarily interrupted; save work first. Setup detects incomplete/legacy shutdown and offers the same repair before upgrading. No shared-service restart occurs silently. [Recovery details](docs/MIDI_RECOVERY.en.md).

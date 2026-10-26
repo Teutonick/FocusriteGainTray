@@ -26,6 +26,10 @@ try {
     }
     $invalid = Start-Process -FilePath (Join-Path $Payload 'FocGrain.exe') -ArgumentList '--unknown-setup-option' -Wait -PassThru -WindowStyle Hidden
     if ($invalid.ExitCode -ne 64) { throw 'Unknown CLI arguments must not start the tray' }
+    foreach($mode in @('--repair-midi-service','--after-recovery')) {
+        $invalidRecovery = Start-Process -FilePath (Join-Path $Payload 'FocGrain.exe') -ArgumentList @($mode,'invalid') -Wait -PassThru -WindowStyle Hidden
+        if($invalidRecovery.ExitCode -ne 64){throw 'Invalid recovery CLI must not access the service'}
+    }
     $guideOutput = Join-Path $scratch ('guide-' + [Guid]::NewGuid().ToString('N'))
     $guide = Start-Process -FilePath (Join-Path $Payload 'FocGrain.exe') -ArgumentList @('--guide-preview','en',('"' + $guideOutput + '"')) -PassThru -WindowStyle Hidden
     if (!$guide.WaitForExit(15000)) { $guide.Kill(); throw 'Published guide render timed out' }

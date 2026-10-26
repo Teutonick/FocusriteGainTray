@@ -332,7 +332,23 @@ begin
   if IsUninstaller then SilentMode := UninstallSilent else SilentMode := WizardSilent;
   if not SilentMode then
     if MsgBox(L('Перед продолжением будут закрыты запущенные экземпляры FocGrain из этой папки установки. Зависшие и старые версии будут завершены принудительно. Продолжить?', 'Continue and close running FocGrain instances from this installation folder? Older or unresponsive versions will be terminated if necessary.'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then exit;
-  Result := Exec(Helper, '--shutdown-installation "' + ExpandConstant('{app}\FocGrain.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+  if not Exec(Helper, '--shutdown-installation "' + ExpandConstant('{app}\FocGrain.exe') + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) then exit;
+  if Code = 0 then begin Result := True; exit; end;
+  if Code <> 31 then exit;
+  Log('FocGrain shutdown requires explicit MIDI service recovery (31).');
+  if SilentMode then begin
+    // Never reset a shared service silently. Uninstall may remove the app;
+    // an unattended upgrade must not launch against an incomplete shutdown.
+    Result := IsUninstaller;
+    exit;
+  end;
+  if MsgBox(L('FocGrain закрыт, но MIDI-соединение не завершено или старая версия не сообщает результат закрытия. Перед запуском новой версии нужно восстановить MIDI-службу.', 'FocGrain closed, but MIDI cleanup is incomplete or the older version cannot report its result. Recover the MIDI service before starting the new version.') + #13#10#13#10 +
+    L('Сохраните работу в MIDI-программах. Перезапустить только Windows MIDI Services? Это временно разорвёт MIDI-соединения других программ. При зависшей остановке будет завершён только проверенный выделенный процесс System32/MidiSrv.exe. Аудиодрайверы и FC2 не изменяются.', 'Save work in MIDI applications. Restart only Windows MIDI Services? This temporarily disconnects other MIDI clients. If stop hangs, only the verified dedicated System32/MidiSrv.exe process is terminated. Audio drivers and FC2 are not changed.'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then begin
+    Result := IsUninstaller;
+    exit;
+  end;
+  Result := Exec(Helper, '--repair-midi-service 0', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+  if not Result then MsgBox(L('Не удалось восстановить MIDI-службу. Новая копия не будет запущена. Код: ', 'MIDI service recovery failed. A new copy will not be launched. Code: ') + IntToStr(Code), mbError, MB_OK);
 end;
 
 function InitializeUninstall: Boolean;

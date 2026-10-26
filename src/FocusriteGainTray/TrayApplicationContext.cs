@@ -10,6 +10,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly bool _atLogon;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _starting;
+    private bool _recovering;
+    private readonly Fc2Startup _fc2Startup = new(FocusriteControl2.Locate, FocusriteControl2.IsRunning, FocusriteControl2.Launch);
     private AppSettings _settings = SettingsStore.Load();
     private readonly GainState _state = new();
     private Icon? _statusIcon;
@@ -55,6 +57,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         return RunMidiAsync(controller => controller.Connect(), TimeSpan.FromSeconds(30), () =>
         {
             _ready = true;
+            MidiRecoveryState.Clear();
+            TryStartFc2();
             _tray.BalloonTipTitle = "FocGrain";
             _tray.BalloonTipText = Ui.T("В FC2 выберите FocGrain, канал 1 / All channels и снимите Enable pickup. Пошаговый мастер доступен в меню трея.", "In FC2 select FocGrain, channel 1 / All channels, and turn OFF Enable pickup. Open the setup wizard from the tray menu.");
             _tray.ShowBalloonTip(6000);
@@ -79,8 +83,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 _ready = false;
                 _state.Reset();
                 Alert(ex is TimeoutException
-                    ? Ui.T("Windows MIDI Services не ответил. Сохраните работу в MIDI-программах и перезагрузите Windows, затем запустите FocGrain перед FC2. Подробности — в разделе восстановления MIDI в меню трея.",
-                        "Windows MIDI Services did not respond. Save work in MIDI applications and restart Windows, then start FocGrain before FC2. See MIDI recovery in the tray menu for details.")
+                    ? Ui.T("Windows MIDI Services не ответил. Сохраните работу в MIDI-программах и выберите «Восстановить MIDI без перезагрузки» в меню трея. Служба перезапускается только с вашим подтверждением.",
+                        "Windows MIDI Services did not respond. Save work in MIDI applications and choose Repair MIDI without restarting Windows in the tray menu. The service restarts only with your confirmation.")
                     : ex.Message);
             }
         }
@@ -99,6 +103,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
             HotkeyAction.Increase => AdjustAsync(_settings.Step),
             _ => AdjustAsync(-_settings.Step)
         };
+    }
+
+    private void TryStartFc2()
+    {
+        try
+        {
+            var result = _fc2Startup.Run(_settings.StartFocusriteControl2, _ready && !_closing);
+            Log.Write("FC2 startup after MIDI readiness: " + result);
+            if (result == Fc2StartupResult.NotInstalled)
+                Alert(Ui.T("Порт готов, но Focusrite Control 2 не найден. Откройте FC2 вручную или установите его через setup.", "The MIDI port is ready, but Focusrite Control 2 was not found. Open FC2 manually or install it through setup."));
+        }
+        catch (Exception ex)
+        {
+            Log.Write("FC2 launch failed (MIDI port remains open): " + ex);
+            Alert(Ui.T("Не удалось запустить FC2. Откройте Focusrite Control 2 вручную. ", "Could not start FC2. Open Focusrite Control 2 manually. ") + ex.Message);
+        }
     }
 
     private Task ToggleAsync()
@@ -121,7 +141,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (!_ready)
         {
             Alert(_midi.Faulted
-                ? Ui.T("Windows MIDI Services не ответил. Откройте «Восстановление Windows MIDI» в меню трея.", "Windows MIDI Services did not respond. Open Windows MIDI recovery in the tray menu.")
+                ? Ui.T("Windows MIDI Services не ответил. Выберите «Восстановить MIDI без перезагрузки» в меню трея.", "Windows MIDI Services did not respond. Choose Repair MIDI without restarting Windows in the tray menu.")
                 : Ui.T("MIDI-порт не открыт. Выберите «Повторить открытие MIDI-порта» в трее.", "The MIDI port is not open. Select Retry opening MIDI port in the tray."));
             return Task.CompletedTask;
         }
@@ -189,8 +209,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // Do not tear down/recreate an already-live endpoint while FC2 is selecting it.
         if (!_ready && !_midi.Faulted && !_starting)
             menu.Items.Add(new ToolStripMenuItem(Ui.T("Повторить открытие MIDI-порта", "Retry opening MIDI port"), null, async (_, _) => await ConnectAsync()) { Enabled = !_busy });
-        if (_midi.Faulted)
-            menu.Items.Add(new ToolStripMenuItem(Ui.T("Восстановление Windows MIDI…", "Windows MIDI recovery…"), null, (_, _) => ShowMidiRecovery()));
+        if (!_ready && !_starting)
+            menu.Items.Add(new ToolStripMenuItem(Ui.T("Восстановить MIDI без перезагрузки…", "Repair MIDI without restarting Windows…"), null, (_, _) => ShowMidiRecovery()) { Enabled = !_busy && !_recovering });
         menu.Items.Add(new ToolStripMenuItem(Ui.T("Проверить обновления…", "Check for updates…"), null, (_, _) => { using var dialog = new UpdateDialog(); dialog.ShowDialog(); }));
         menu.Items.Add(new ToolStripMenuItem(Ui.T("Открыть лог", "Open log"), null, (_, _) =>
         {
@@ -236,12 +256,40 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Log.Write(message);
     }
 
-    private void ShowMidiRecovery()
+    private async void ShowMidiRecovery()
     {
-        MessageBox.Show(Ui.T(
-            "Windows MIDI Services не завершил операцию.\n\n1. Сохраните работу в MIDI-программах и закройте FC2/FocGrain.\n2. Выберите Пуск → Питание → Перезагрузка.\n3. Сначала запустите FocGrain, дождитесь готовности, затем откройте FC2 и выберите FocGrain.\n4. Оставьте канал 1 / All channels, Enable pickup выключен.\n\nЕсли повторяется — проверьте Центр обновления Windows. Сведения о системном дефекте и журнал: docs/MIDI_RECOVERY.md в папке установки.",
-            "Windows MIDI Services did not finish an operation.\n\n1. Save work in MIDI applications and close FC2/FocGrain.\n2. Use Start → Power → Restart.\n3. Start FocGrain first, wait for readiness, then open FC2 and select FocGrain.\n4. Keep channel 1 / All channels and Enable pickup OFF.\n\nIf it recurs, check Windows Update. System issue details: docs/MIDI_RECOVERY.en.md in the installation folder."),
-            Ui.T("Восстановление Windows MIDI", "Windows MIDI recovery"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        if (_recovering || _closing || _busy) return;
+        if (MessageBox.Show(Ui.T(
+            "Перезапустить только Windows MIDI Services и затем FocGrain?\n\nЭто временно разорвёт MIDI-соединения других программ. Сохраните работу перед продолжением. Потребуется подтверждение UAC. Если служба зависла, завершится только проверенный выделенный процесс System32/MidiSrv.exe. FC2, аудиодрайверы и настройки gain не изменяются.",
+            "Restart only Windows MIDI Services, then FocGrain?\n\nThis temporarily disconnects MIDI connections in other applications. Save your work first. UAC approval is required. If stopping hangs, only the verified dedicated System32/MidiSrv.exe process is terminated. FC2, audio drivers and gain settings are not changed."),
+            "FocGrain", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+        _recovering = true;
+        _ready = false;
+        _state.Reset();
+        _busy = true;
+        RebuildMenu();
+        try
+        {
+            string exe = Environment.ProcessPath!;
+            using var helper = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                Arguments = $"--repair-midi-service {Environment.ProcessId}", UseShellExecute = true, Verb = "runas", WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden,
+            }) ?? throw new IOException("Recovery helper did not start.");
+            // The elevated helper waits for this MIDI owner to exit. The next
+            // unelevated process waits for successful service recovery, so no
+            // old native object can race the reset and no elevated tray is left.
+            string readyId = Guid.NewGuid().ToString("N");
+            using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, MidiRecovery.ReadyEventName(readyId));
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe)
+            {
+                Arguments = $"--after-recovery {helper.Id} {readyId}", UseShellExecute = true,
+            })?.Dispose();
+            if (!await Task.Run(() => ready.WaitOne(10000))) throw new IOException("Recovery waiter did not become ready; the service helper will refuse while this app is running.");
+            ExitThread();
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { Log.Write("MIDI recovery cancelled at UAC."); }
+        catch (Exception ex) { Alert(ex.Message); }
+        finally { _recovering = false; _busy = false; if (!_closing) RebuildMenu(); }
     }
 
     private void ActivateExisting()
@@ -270,6 +318,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.Visible = false;
         try { await _midi.StopAsync(TimeSpan.FromSeconds(2)); }
         catch (Exception ex) { Log.Write("MIDI shutdown: " + ex); }
+        if (_midi.Faulted)
+        {
+            Environment.ExitCode = MidiRecoveryPolicy.DirtyShutdown;
+            MidiRecoveryState.MarkDirty();
+            Log.Write("MIDI shutdown incomplete; exit code 31 requires explicit service recovery before upgrade launch.");
+        }
         _tray.ContextMenuStrip?.Dispose();
         _tray.Dispose();
         _statusIcon?.Dispose();

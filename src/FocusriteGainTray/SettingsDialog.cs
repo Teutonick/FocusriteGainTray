@@ -16,7 +16,7 @@ internal sealed class SettingsDialog : Form
     public SettingsDialog(AppSettings current)
     {
         Text = Ui.T("FocGrain — настройки", "FocGrain — settings");
-        ClientSize = new Size(600, 520);
+        ClientSize = new Size(600, 560);
         Icon = _ownedIcon;
         AutoScaleMode = AutoScaleMode.Dpi;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -60,17 +60,19 @@ internal sealed class SettingsDialog : Form
         bool startupInitiallyEnabled = StartupRegistration.Enabled;
         var startup = new CheckBox { Text = Ui.T("Запускать при входе в Windows", "Start when I sign in to Windows"), Left = 17, Top = 377, Width = 550, Height = 28, Checked = startupInitiallyEnabled };
         Controls.Add(startup);
-        var version = new Label { Text = $"FocGrain {ProductInfo.VersionText}", Left = 17, Top = 420, Width = 200, Height = 24 };
-        var updates = new Button { Text = Ui.T("Проверить обновления…", "Check for updates…"), Left = 17, Top = 465, Width = 230, Height = 34 };
+        var fc2 = new CheckBox { Text = Ui.T("Запускать FC2 после готовности MIDI-порта", "Start FC2 after the MIDI port is ready"), Left = 17, Top = 412, Width = 550, Height = 28, Checked = current.StartFocusriteControl2 };
+        Controls.Add(fc2);
+        var version = new Label { Text = $"FocGrain {ProductInfo.VersionText}", Left = 17, Top = 460, Width = 200, Height = 24 };
+        var updates = new Button { Text = Ui.T("Проверить обновления…", "Check for updates…"), Left = 17, Top = 510, Width = 230, Height = 34 };
         updates.Click += (_, _) => { using var dialog = new UpdateDialog(); dialog.ShowDialog(this); };
         Controls.Add(version);
         Controls.Add(updates);
-        var guide = new LinkLabel { Text = Ui.T("Мастер настройки FC2…", "FC2 setup wizard…"), Left = 310, Top = 420, Width = 265, Height = 24 };
+        var guide = new LinkLabel { Text = Ui.T("Мастер настройки FC2…", "FC2 setup wizard…"), Left = 310, Top = 460, Width = 265, Height = 24 };
         guide.LinkClicked += (_, _) => WizardHost.Show(this);
         Controls.Add(guide);
 
-        var save = new Button { Text = Ui.T("Сохранить", "Save"), Left = 350, Top = 465, Width = 115, Height = 34 };
-        var cancel = new Button { Text = Ui.T("Отмена", "Cancel"), Left = 475, Top = 465, Width = 105, Height = 34, DialogResult = DialogResult.Cancel };
+        var save = new Button { Text = Ui.T("Сохранить", "Save"), Left = 350, Top = 510, Width = 115, Height = 34 };
+        var cancel = new Button { Text = Ui.T("Отмена", "Cancel"), Left = 475, Top = 510, Width = 105, Height = 34, DialogResult = DialogResult.Cancel };
         Controls.Add(save);
         Controls.Add(cancel);
         AcceptButton = save;
@@ -96,6 +98,7 @@ internal sealed class SettingsDialog : Form
                     ToggleHotkey = _toggle.Text,
                     IncreaseHotkey = _increase.Text,
                     DecreaseHotkey = _decrease.Text,
+                    StartFocusriteControl2 = fc2.Checked,
                 };
                 updated.Validate();
                 if (startup.Checked || startup.Checked != startupInitiallyEnabled) StartupRegistration.SetEnabled(startup.Checked);

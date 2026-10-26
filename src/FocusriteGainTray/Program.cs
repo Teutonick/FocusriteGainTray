@@ -8,8 +8,12 @@ internal static class Program
     private static int Main(string[] args)
     {
         Ui.Initialize();
+        if (args.Length == 2 && args[0] == "--repair-midi-service" && int.TryParse(args[1], out int recoveryOwner) && recoveryOwner >= 0)
+            return MidiRecovery.RunElevated(recoveryOwner);
         if (args.Length == 2 && args[0] == "--shutdown-installation")
             return InstallationShutdown.Run(args[1]);
+        if (args.Length == 3 && args[0] == "--shutdown-test-instance" && int.TryParse(args[2], out int testPid) && testPid > 0)
+            return InstallationShutdown.Run(args[1], testPid);
         if (args.Length == 2 && args[0] is "--lifecycle-test-host" or "--lifecycle-test-unresponsive")
         {
             // Isolated process-lifecycle QA; no MIDI, tray, startup entry or settings.
@@ -20,7 +24,15 @@ internal static class Program
                 File.WriteAllText(args[1] + ".closed", "graceful");
                 context.ExitThread();
             });
-            if (args[0] == "--lifecycle-test-unresponsive") window.Dispose();
+            if (args[0] == "--lifecycle-test-unresponsive")
+            {
+                window.Dispose();
+                File.WriteAllText(args[1], "ready");
+                // Keep this no-MIDI test process alive until the shutdown
+                // helper exercises its forced-termination path.
+                Thread.Sleep(Timeout.Infinite);
+                return 0;
+            }
             File.WriteAllText(args[1], "ready");
             Application.Run(context);
             return 0;
@@ -71,9 +83,13 @@ internal static class Program
         }
         bool showSetup = args.Length == 1 && args[0] == "--setup";
         bool atLogon = args.Length == 1 && args[0] == "--autostart";
+        bool afterRecovery = args.Length is 2 or 3 && args[0] == "--after-recovery" && int.TryParse(args[1], out int previousPid) && previousPid > 0
+            && (args.Length == 2 || Guid.TryParseExact(args[2], "N", out _));
         bool smoke = args.Length == 2 && args[0] == "--midi-smoke";
         bool instanceTest = args.Length == 2 && args[0] == "--instance-test-host";
-        if (args.Length != 0 && !showSetup && !atLogon && !smoke && !instanceTest) return 64;
+        if (args.Length != 0 && !showSetup && !atLogon && !smoke && !instanceTest && !afterRecovery) return 64;
+        if (afterRecovery && !MidiRecovery.WaitForRecoveryHelper(int.Parse(args[1]), args.Length == 3 ? args[2] : null)) return 75;
+        if (!instanceTest && MidiRecovery.Active()) return 75;
         SingleInstance? instance;
         bool acquired;
         if (instanceTest)
@@ -112,6 +128,6 @@ internal static class Program
         // Existing pre-1.0.1 Run entries have no --autostart switch. Cover their
         // early-boot launch too, without changing the user's startup preference.
         Application.Run(new TrayApplicationContext(showSetup, atLogon || Environment.TickCount64 < 120_000));
-        return 0;
+        return Environment.ExitCode;
     }
 }

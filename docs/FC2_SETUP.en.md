@@ -25,3 +25,7 @@ The tray status **Ready to control gain** means FocGrain is ready to send your g
 The screenshots were supplied by the user for this guide. The depicted interface and Focusrite marks remain the property of their respective owners. FocGrain is an independent project, not a Focusrite product.
 
 [Official Focusrite MIDI documentation](https://support.focusrite.com/hc/en-gb/articles/38789425032594-Controlling-Focusrite-Control-2-via-MIDI).
+
+## After Windows sign-in
+
+From 1.0.3, keep Start FC2 after the MIDI port is ready enabled in FocGrain Settings. Order: FocGrain starts → WinMM input becomes ready → FC2 starts. An existing FC2 instance is not relaunched. Focusrite Notifier is separate from FC2. With this option off, open FC2 manually.
