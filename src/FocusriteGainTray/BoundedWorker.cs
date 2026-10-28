@@ -37,7 +37,7 @@ public sealed class BoundedWorker<T> where T : class, IDisposable
             {
                 Interlocked.Exchange(ref _faulted, 1);
                 // Observe a late failure even though this request has already timed out.
-                _ = done.Task.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+                _ = done.Task.ContinueWith(t => Log.Write("MIDI operation failed after timeout: " + t.Exception), TaskContinuationOptions.OnlyOnFaulted);
                 throw new TimeoutException(Ui.T("Windows MIDI Services не завершил операцию. Используйте «Восстановить MIDI без перезагрузки» в меню FocGrain.", "Windows MIDI Services did not finish the operation. Use Repair MIDI without restarting Windows in the FocGrain menu."));
             }
         }
@@ -70,7 +70,7 @@ public sealed class BoundedWorker<T> where T : class, IDisposable
         finally
         {
             try { instance?.Dispose(); }
-            catch { /* The UI must still be able to quit if the service failed. */ }
+            catch (Exception ex) { Log.Write("MIDI worker disposal failed: " + ex); Interlocked.Exchange(ref _faulted, 1); }
             _queue.Dispose();
             _stopped.TrySetResult();
         }

@@ -7,7 +7,35 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"FATAL unhandled exception; terminating={e.IsTerminating}: {e.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, e) => { Log.Write("Unobserved task exception: " + e.Exception); e.SetObserved(); };
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+        {
+            Log.Write("FATAL UI exception; requesting controlled shutdown: " + e.Exception);
+            Environment.ExitCode = 1;
+            Application.Exit();
+        };
+        try { return Run(args); }
+        catch (Exception ex) { Log.Write("FATAL main exception: " + ex); return 1; }
+    }
+
+    private static int Run(string[] args)
+    {
         Ui.Initialize();
+        if (args.Length == 2 && args[0] == "--check-midi-recovery-access")
+        {
+            try
+            {
+                using var service = new WindowsMidiServiceRecovery();
+                service.CheckRecoveryAccess();
+                File.WriteAllText(args[1], "PASS verified MIDI recovery process access; no service changes");
+                return 0;
+            }
+            catch (Exception ex) { File.WriteAllText(args[1], ex.ToString()); return 1; }
+        }
+        if (args.Length == 4 && args[0] == "--repair-midi-service" && args[1] == "0" && args[2] == "--report")
+            return MidiRecovery.RunElevated(0, Path.GetFullPath(args[3]));
         if (args.Length == 2 && args[0] == "--repair-midi-service" && int.TryParse(args[1], out int recoveryOwner) && recoveryOwner >= 0)
             return MidiRecovery.RunElevated(recoveryOwner);
         if (args.Length == 2 && args[0] == "--shutdown-installation")
@@ -88,7 +116,12 @@ internal static class Program
         bool smoke = args.Length == 2 && args[0] == "--midi-smoke";
         bool instanceTest = args.Length == 2 && args[0] == "--instance-test-host";
         if (args.Length != 0 && !showSetup && !atLogon && !smoke && !instanceTest && !afterRecovery) return 64;
-        if (afterRecovery && !MidiRecovery.WaitForRecoveryHelper(int.Parse(args[1]), args.Length == 3 ? args[2] : null)) return 75;
+        if (afterRecovery)
+        {
+            if (!MidiRecovery.WaitForRecoveryHelper(int.Parse(args[1]), args.Length == 3 ? args[2] : null)) return 75;
+            Log.Write("Recovery helper exit code 0 confirmed in original user process; clearing this user's dirty marker.");
+            MidiRecoveryState.Clear();
+        }
         if (!instanceTest && MidiRecovery.Active()) return 75;
         SingleInstance? instance;
         bool acquired;
@@ -108,7 +141,7 @@ internal static class Program
             return 0;
         }
         using var owner = instance!;
-        if (!instanceTest) Log.Write($"Process started; session={System.Diagnostics.Process.GetCurrentProcess().SessionId}; mode={(atLogon ? "autostart" : showSetup ? "setup" : smoke ? "smoke" : "tray")}");
+        if (!instanceTest) Log.Write($"Process started; version={ProductInfo.VersionText}; runtime={Environment.Version}; os={Environment.OSVersion}; uptimeMs={Environment.TickCount64}; session={System.Diagnostics.Process.GetCurrentProcess().SessionId}; mode={(atLogon ? "autostart" : showSetup ? "setup" : smoke ? "smoke" : "tray")}");
         if (smoke)
         {
             try { return MidiSmoke.RunAsync(args[1]).GetAwaiter().GetResult(); }
@@ -124,10 +157,25 @@ internal static class Program
             return 0;
         }
 
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Write($"ProcessExit; exitCode={Environment.ExitCode}");
+        string runMarker = Path.Combine(SettingsStore.DirectoryPath, "active-run.txt");
+        try
+        {
+            Directory.CreateDirectory(SettingsStore.DirectoryPath);
+            if (File.Exists(runMarker)) Log.Write("Previous tray run has no completed shutdown record (crash, forced termination or power loss possible): " + File.ReadAllText(runMarker));
+            File.WriteAllText(runMarker, $"PID={Environment.ProcessId}; started={DateTimeOffset.Now:O}; version={ProductInfo.VersionText}");
+        }
+        catch (Exception ex) { Log.Write("Run marker write failed: " + ex); }
         ApplicationConfiguration.Initialize();
         // Existing pre-1.0.1 Run entries have no --autostart switch. Cover their
         // early-boot launch too, without changing the user's startup preference.
         Application.Run(new TrayApplicationContext(showSetup, atLogon || Environment.TickCount64 < 120_000));
+        if (Environment.ExitCode is 0 or MidiRecoveryPolicy.DirtyShutdown)
+        {
+            try { File.Delete(runMarker); }
+            catch (Exception ex) { Log.Write("Run marker cleanup failed: " + ex); }
+        }
+        Log.Write($"Application message loop ended; exitCode={Environment.ExitCode}");
         return Environment.ExitCode;
     }
 }

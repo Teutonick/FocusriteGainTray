@@ -10,6 +10,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly bool _atLogon;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _starting;
+    private readonly PowerTransitionState _power = new();
     private bool _recovering;
     private readonly Fc2Startup _fc2Startup = new(FocusriteControl2.Locate, FocusriteControl2.IsRunning, FocusriteControl2.Launch);
     private AppSettings _settings = SettingsStore.Load();
@@ -28,7 +29,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         try { _hotkeys.Apply(_settings); }
         catch (Exception ex) { Alert(Ui.T("Горячие клавиши: ", "Keyboard shortcuts: ") + ex.Message); }
         RebuildMenu();
-        _setupRequests = new SetupRequestWindow(() => WizardHost.Show(), () => ExitThread(), ActivateExisting);
+        _setupRequests = new SetupRequestWindow(() => WizardHost.Show(), () => ExitThread(), ActivateExisting, OnPowerChanged);
         Application.Idle += StartOnIdle;
     }
 
@@ -39,6 +40,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         RebuildMenu();
         try
         {
+            if (MidiRecoveryState.Required)
+            {
+                Alert(Ui.T("Предыдущее MIDI-соединение завершено нештатно. Используйте «Восстановить MIDI без перезагрузки»; автоматическое открытие порта заблокировано.", "Previous MIDI cleanup was incomplete. Use Repair MIDI without restarting Windows; automatic port opening is blocked."));
+                return;
+            }
             await MidiStartup.RunAsync(_atLogon,
                 async () => { await ConnectAsync(); return _ready; },
                 () => _midi.Faulted, () => _closing,
@@ -49,12 +55,45 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_showSetupOnStart && !_closing) WizardHost.Show();
     }
 
-    private Task ConnectAsync()
+    private async void OnPowerChanged(bool resumed)
     {
-        if (_busy || _closing) return Task.CompletedTask;
+        if (_closing) return;
+        int generation = _power.Transition(resumed);
         _ready = false;
         _state.Reset();
-        return RunMidiAsync(controller => controller.Connect(), TimeSpan.FromSeconds(30), () =>
+        Log.Write($"Power transition: {(resumed ? "resume" : "suspend")}; busy={_busy}; starting={_starting}; workerFaulted={_midi.Faulted}; generation={generation}");
+        RebuildMenu();
+        if (!resumed) return;
+        try
+        {
+            // Do not race a native call or replay user gain commands. Allow services to wake.
+            await Task.Delay(TimeSpan.FromSeconds(3), _lifetime.Token);
+            while ((_busy || _starting) && !_closing && generation == _power.Generation)
+                await Task.Delay(200, _lifetime.Token);
+            if (_closing || generation != _power.Generation) return;
+            if (_midi.Faulted || MidiRecoveryState.Required)
+            {
+                Alert(Ui.T("После восстановления Windows MIDI не отвечает. Используйте «Восстановить MIDI без перезагрузки» в меню трея.", "After Windows resume MIDI is unresponsive. Use Repair MIDI without restarting Windows in the tray menu."));
+                return;
+            }
+            Log.Write("Resume: rebuilding MIDI connection; no gain commands will be sent.");
+            await ConnectAsync(recreate: true);
+        }
+        catch (OperationCanceledException) when (_closing) { }
+        catch (Exception ex) { Log.Write("Resume recovery failed: " + ex); }
+        finally
+        {
+            _power.CompleteRecovery(generation);
+            if (!_closing) RebuildMenu();
+        }
+    }
+
+    private Task ConnectAsync(bool recreate = false)
+    {
+        if (_busy || _closing || _power.Suspended || MidiRecoveryState.Required) return Task.CompletedTask;
+        _ready = false;
+        _state.Reset();
+        return RunMidiAsync(controller => { if (recreate) controller.Disconnect(); controller.Connect(); }, TimeSpan.FromSeconds(30), () =>
         {
             _ready = true;
             MidiRecoveryState.Clear();
@@ -65,19 +104,22 @@ internal sealed class TrayApplicationContext : ApplicationContext
         });
     }
 
-    private async Task RunMidiAsync(Action<WindowsMidiVirtualController> action, TimeSpan timeout, Action onSuccess)
+    private async Task RunMidiAsync(Action<WindowsMidiVirtualController> action, TimeSpan timeout, Action onSuccess, string operation = "connect")
     {
         if (_busy || _closing) return;
         _busy = true;
+        int generation = _power.Generation;
+        Log.Write($"MIDI operation started; operation={operation}; timeout={timeout}; generation={generation}");
         RebuildMenu();
         try
         {
             await _midi.ExecuteAsync(action, timeout);
-            if (!_closing) onSuccess();
+            Log.Write($"MIDI operation returned; operation={operation}; generation={generation}; currentGeneration={_power.Generation}");
+            if (!_closing && _power.AcceptsCompletion(generation)) onSuccess();
         }
         catch (Exception ex)
         {
-            Log.Write("MIDI operation failed: " + ex);
+            Log.Write($"MIDI operation failed; operation={operation}; HResult=0x{ex.HResult:X8}; generation={generation}; currentGeneration={_power.Generation}; workerFaulted={_midi.Faulted}: {ex}");
             if (!_closing)
             {
                 _ready = false;
@@ -137,15 +179,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private Task SendGainAsync(int input, int value)
     {
         // Never queue clicks/hotkeys while native MIDI is busy: no delayed gain changes.
-        if (_busy || _closing || _starting) return Task.CompletedTask;
+        if (_busy || _closing || _starting || _power.Suspended || _power.Recovering) return Task.CompletedTask;
         if (!_ready)
         {
-            Alert(_midi.Faulted
+            Alert((_midi.Faulted || MidiRecoveryState.Required)
                 ? Ui.T("Windows MIDI Services не ответил. Выберите «Восстановить MIDI без перезагрузки» в меню трея.", "Windows MIDI Services did not respond. Choose Repair MIDI without restarting Windows in the tray menu.")
                 : Ui.T("MIDI-порт не открыт. Выберите «Повторить открытие MIDI-порта» в трее.", "The MIDI port is not open. Select Retry opening MIDI port in the tray."));
             return Task.CompletedTask;
         }
-        return RunMidiAsync(controller => controller.SendGain(input, value), TimeSpan.FromSeconds(3), () => _state.Record(input, value));
+        return RunMidiAsync(controller => controller.SendGain(input, value), TimeSpan.FromSeconds(3), () => _state.Record(input, value), $"send CC{GainState.Controller(input)}={value}");
     }
 
     private void SelectInput(int input)
@@ -197,7 +239,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         int input = _settings.SelectedInput;
         var ch = _settings.Channel(input);
-        void Command(string text, Func<Task> command) => menu.Items.Add(new ToolStripMenuItem(text, null, async (_, _) => await command()) { Enabled = _ready && !_busy });
+        void Command(string text, Func<Task> command) => menu.Items.Add(new ToolStripMenuItem(text, null, async (_, _) => await command()) { Enabled = _ready && !_busy && !_power.Suspended && !_power.Recovering });
         Command(Ui.T($"Минимум — MIDI-значение {ch.A}", $"Minimum — MIDI value {ch.A}"), () => SendGainAsync(input, ch.A));
         Command(Ui.T($"Максимум — MIDI-значение {ch.B}", $"Maximum — MIDI value {ch.B}"), () => SendGainAsync(input, ch.B));
         Command(Ui.T($"Переключить MIN ↔ MAX ({_settings.ToggleHotkey})", $"Toggle MIN ↔ MAX ({_settings.ToggleHotkey})"), ToggleAsync);
@@ -207,7 +249,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(new ToolStripMenuItem(Ui.T("Настройки…", "Settings…"), null, (_, _) => Configure()) { Enabled = !_busy });
         menu.Items.Add(new ToolStripMenuItem(Ui.T("Мастер настройки Focusrite Control 2…", "Focusrite Control 2 setup wizard…"), null, (_, _) => WizardHost.Show()));
         // Do not tear down/recreate an already-live endpoint while FC2 is selecting it.
-        if (!_ready && !_midi.Faulted && !_starting)
+        if (!_ready && !_midi.Faulted && !_starting && !MidiRecoveryState.Required)
             menu.Items.Add(new ToolStripMenuItem(Ui.T("Повторить открытие MIDI-порта", "Retry opening MIDI port"), null, async (_, _) => await ConnectAsync()) { Enabled = !_busy });
         if (!_ready && !_starting)
             menu.Items.Add(new ToolStripMenuItem(Ui.T("Восстановить MIDI без перезагрузки…", "Repair MIDI without restarting Windows…"), null, (_, _) => ShowMidiRecovery()) { Enabled = !_busy && !_recovering });
@@ -223,7 +265,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             catch (Exception ex) { Alert(ex.Message); }
         }));
         menu.Items.Add(new ToolStripMenuItem($"FocGrain {ProductInfo.VersionText}") { Enabled = false });
-        menu.Items.Add(new ToolStripMenuItem(Ui.T("Выход", "Quit"), null, (_, _) => ExitThread()));
+        menu.Items.Add(new ToolStripMenuItem(Ui.T("Выход", "Quit"), null, (_, _) => { Log.Write("Quit selected in tray menu."); ExitThread(); }));
         var old = _tray.ContextMenuStrip;
         _tray.ContextMenuStrip = menu;
         if (old is not null)
@@ -310,6 +352,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (_closing) return;
         _closing = true;
+        Log.Write($"Tray shutdown requested; busy={_busy}; ready={_ready}; suspended={_power.Suspended}; resuming={_power.Recovering}; workerFaulted={_midi.Faulted}");
         _lifetime.Cancel();
         Application.Idle -= StartOnIdle;
         _setupRequests.Dispose();
@@ -328,6 +371,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.Dispose();
         _statusIcon?.Dispose();
         _lifetime.Dispose();
+        Log.Write($"Tray shutdown completed; exitCode={Environment.ExitCode}");
         base.ExitThreadCore();
     }
 }

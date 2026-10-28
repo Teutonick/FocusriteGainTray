@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/FocusriteGainTray/RecoveryReceipt.cs" Link="RecoveryReceipt.cs" />
+    <Compile Include="../../src/FocusriteGainTray/PowerTransitionState.cs" Link="PowerTransitionState.cs" />
     <Compile Include="../../src/FocusriteGainTray/AppSettings.cs" Link="AppSettings.cs" />
     <Compile Include="../../src/FocusriteGainTray/GainState.cs" Link="GainState.cs" />
     <Compile Include="../../src/FocusriteGainTray/PrerequisitePolicy.cs" Link="PrerequisitePolicy.cs" />

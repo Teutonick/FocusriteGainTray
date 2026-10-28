@@ -234,6 +234,37 @@ Check("stuck stop triggers verified fallback; unexpected state fails closed", ()
     try { MidiRecoveryPolicy.Restart(invalid,()=>{}); throw new Exception("Unexpected state was terminated"); } catch(IOException) { }
     Equal("stop",string.Join(',',invalid.Calls));
 });
+Check("sleep invalidates in-flight success and resume blocks gain until recovery", () => {
+    var power = new PowerTransitionState();
+    int beforeSleep = power.Generation;
+    power.Transition(false);
+    Equal(true, power.BlocksGain); Equal(false, power.AcceptsCompletion(beforeSleep));
+    int resumed = power.Transition(true);
+    Equal(true, power.BlocksGain); Equal(false, power.AcceptsCompletion(beforeSleep));
+    Equal(true, power.AcceptsCompletion(resumed));
+    power.CompleteRecovery(resumed); Equal(false, power.BlocksGain);
+});
+Check("another sleep or resume invalidates previous recovery completion", () => {
+    var power = new PowerTransitionState();
+    int firstResume = power.Transition(true);
+    power.Transition(false);
+    power.CompleteRecovery(firstResume);
+    Equal(true, power.BlocksGain); Equal(false, power.AcceptsCompletion(firstResume));
+    int nextResume = power.Transition(true);
+    power.CompleteRecovery(firstResume); Equal(true, power.BlocksGain);
+    power.CompleteRecovery(nextResume); Equal(false, power.BlocksGain);
+});
+Check("cross-account machine recovery supersedes only older valid dirty markers", () => {
+    var dirty = DateTimeOffset.Parse("2026-10-28T12:32:00+03:00");
+    string marker = dirty.ToString("O");
+    Equal(true, RecoveryReceipt.Supersedes(marker, dirty.AddSeconds(1).UtcTicks));
+    Equal(false, RecoveryReceipt.Supersedes(marker, dirty.UtcTicks));
+    Equal(false, RecoveryReceipt.Supersedes(marker, dirty.AddSeconds(-1).UtcTicks));
+    Equal(false, RecoveryReceipt.Supersedes("unknown", dirty.AddSeconds(1).UtcTicks));
+    Equal(false, RecoveryReceipt.Supersedes(marker, 0));
+    Equal(false, RecoveryReceipt.Supersedes(marker, long.MaxValue));
+    Equal(true, RecoveryReceipt.Supersedes(dirty.ToUniversalTime().ToString("O"), dirty.AddSeconds(1).UtcTicks));
+});
 Console.WriteLine($"{passed} scenarios passed");
 
 sealed class FakeMidi : IDisposable {

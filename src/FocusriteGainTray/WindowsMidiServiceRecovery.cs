@@ -31,18 +31,39 @@ internal sealed class WindowsMidiServiceRecovery : IMidiServiceRecovery, IDispos
     {
         if (!StartService(_service, 0, IntPtr.Zero) && Marshal.GetLastWin32Error() != 1056) throw new Win32Exception();
     }
+    private SafeProcessHandle OpenVerifiedProcess(MidiServiceState state, bool accessCheckOnly = false)
+    {
+        var process = OpenProcess(0x00100000 | 0x1000 | 0x0001, false, state.ProcessId);
+        if (process.IsInvalid) { int error = Marshal.GetLastWin32Error(); process.Dispose(); throw new Win32Exception(error, "Recovery OpenProcess(query/synchronize/terminate) failed"); }
+        try
+        {
+            var path = new StringBuilder(32768); uint length = (uint)path.Capacity;
+            if (!QueryFullProcessImageName(process, 0, path, ref length)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Recovery QueryFullProcessImageName failed");
+            var owners = Owners(state.ProcessId);
+            string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "MidiSrv.exe");
+            Log.Write($"Recovery verification: state={state}; image={path}; expected={expected}; owners={string.Join(",", owners)}; accessCheckOnly={accessCheckOnly}");
+            // A read-only access diagnostic may inspect Running; termination still requires Stop Pending.
+            var eligibility = accessCheckOnly && state.State == 4 ? state with { State = 3 } : state;
+            if (!MidiRecoveryPolicy.CanTerminate(eligibility, path.ToString(), expected, owners) || Query() != state)
+                throw new IOException("Unverified/shared/changed MIDI service process; termination refused.");
+            Log.Write($"Recovery process verified: PID={state.ProcessId}; image={path}; soleOwner=midisrv; state={state.State}");
+            return process;
+        }
+        catch { process.Dispose(); throw; }
+    }
+    public void CheckRecoveryAccess()
+    {
+        using var privilege = DebugPrivilege.Enable();
+        using var process = OpenVerifiedProcess(Query(), accessCheckOnly: true);
+        Log.Write("Recovery access check passed; no process terminated and no service changed.");
+    }
     public void TerminateVerifiedService(MidiServiceState state)
     {
-        using var process = OpenProcess(0x00100000 | 0x1000 | 0x0001, false, state.ProcessId);
-        if (process.IsInvalid) throw new Win32Exception();
-        var path = new StringBuilder(32768); uint length = (uint)path.Capacity;
-        if (!QueryFullProcessImageName(process, 0, path, ref length)) throw new Win32Exception();
-        var owners = Owners(state.ProcessId);
-        string expected = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "MidiSrv.exe");
-        if (!MidiRecoveryPolicy.CanTerminate(state, path.ToString(), expected, owners)
-            || Query() != state) throw new IOException("Unverified/shared/changed MIDI service process; termination refused.");
+        using var privilege = DebugPrivilege.Enable();
+        using var process = OpenVerifiedProcess(state);
+        if (Query() != state) throw new IOException("MIDI service ownership changed before termination; refused.");
         Log.Write("Recovery: terminating verified dedicated System32/MidiSrv.exe after stop timeout.");
-        if (!TerminateProcess(process, 1)) throw new Win32Exception();
+        if (!TerminateProcess(process, 1)) throw new Win32Exception(Marshal.GetLastWin32Error(), "Recovery TerminateProcess failed");
         if (WaitForSingleObject(process, 10000) != 0) throw new IOException("Verified MIDI process did not exit.");
     }
     private IReadOnlyList<string> Owners(uint pid)

@@ -76,8 +76,10 @@ internal static class SettingsStore
 
 internal static class Log
 {
+    private static readonly object Gate = new();
     public static void Write(string message)
     {
+        lock (Gate)
         try
         {
             Directory.CreateDirectory(SettingsStore.DirectoryPath);
@@ -85,7 +87,7 @@ internal static class Log
             if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
                 File.Move(path, path + ".previous", overwrite: true);
             File.AppendAllText(path,
-                $"[{DateTimeOffset.Now:O}] [PID {Environment.ProcessId}] {message}{Environment.NewLine}");
+                $"[{DateTimeOffset.Now:O}] [PID {Environment.ProcessId}] [TID {Environment.CurrentManagedThreadId}] {message}{Environment.NewLine}");
         }
         catch { /* logging must never crash audio control */ }
     }

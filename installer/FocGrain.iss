@@ -71,7 +71,7 @@ Name: "{group}\{cm:UninstallApp}"; Filename: "{uninstallexe}"; IconFilename: "{a
 Name: "{group}\{cm:SetupWizard}"; Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; IconFilename: "{app}\FocGrain.exe"
 
 [Run]
-Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; Description: "{cm:LaunchApp}"; Flags: postinstall skipifsilent runasoriginaluser
+Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; Description: "{cm:LaunchApp}"; Flags: postinstall skipifsilent runasoriginaluser; Check: CanLaunchAfterInstall
 
 [CustomMessages]
 english.GuideFile=README.md
@@ -91,7 +91,7 @@ var
   StatusText: TNewMemo;
   RefreshButton, VCButton, FCButton, UpdateButton, HelpButton: TNewButton;
   DownloadPage: TDownloadWizardPage;
-  ProbeExtracted, RebootRequired, Busy: Boolean;
+  ProbeExtracted, RebootRequired, Busy, SuppressAppLaunch: Boolean;
   LastCode: Integer;
 
 function L(const Ru, En: String): String;
@@ -324,8 +324,20 @@ begin
   end;
 end;
 
+function CanLaunchAfterInstall: Boolean;
+begin
+  Result := not SuppressAppLaunch;
+end;
+
+function AllowInstallWithoutMidi: Boolean;
+begin
+  Result := IsUninstaller;
+  if not Result then Result := MsgBox(L('Установить обновление без запуска FocGrain? MIDI-служба требует восстановления. Новая версия не будет автоматически открывать порт до явного восстановления через меню трея.', 'Install the update without launching FocGrain? MIDI service recovery is still required. The new version will not automatically open its port until explicit repair from the tray menu.'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+  if Result then SuppressAppLaunch := True;
+end;
+
 function CloseInstalledApp(Helper: String): Boolean;
-var Code: Integer; SilentMode: Boolean;
+var Code, I: Integer; SilentMode: Boolean; ReportPath, Detail: String; ReportLines: TArrayOfString;
 begin
   Result := False;
   if not FileExists(ExpandConstant('{app}\FocGrain.exe')) then begin Result := True; exit; end;
@@ -344,11 +356,21 @@ begin
   end;
   if MsgBox(L('FocGrain закрыт, но MIDI-соединение не завершено или старая версия не сообщает результат закрытия. Перед запуском новой версии нужно восстановить MIDI-службу.', 'FocGrain closed, but MIDI cleanup is incomplete or the older version cannot report its result. Recover the MIDI service before starting the new version.') + #13#10#13#10 +
     L('Сохраните работу в MIDI-программах. Перезапустить только Windows MIDI Services? Это временно разорвёт MIDI-соединения других программ. При зависшей остановке будет завершён только проверенный выделенный процесс System32/MidiSrv.exe. Аудиодрайверы и FC2 не изменяются.', 'Save work in MIDI applications. Restart only Windows MIDI Services? This temporarily disconnects other MIDI clients. If stop hangs, only the verified dedicated System32/MidiSrv.exe process is terminated. Audio drivers and FC2 are not changed.'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) <> IDYES then begin
-    Result := IsUninstaller;
+    Result := AllowInstallWithoutMidi;
     exit;
   end;
-  Result := Exec(Helper, '--repair-midi-service 0', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
-  if not Result then MsgBox(L('Не удалось восстановить MIDI-службу. Новая копия не будет запущена. Код: ', 'MIDI service recovery failed. A new copy will not be launched. Code: ') + IntToStr(Code), mbError, MB_OK);
+  ReportPath := ExpandConstant('{tmp}\midi-recovery.txt');
+  DeleteFile(ReportPath);
+  Code := -1;
+  Result := Exec(Helper, '--repair-midi-service 0 --report "' + ReportPath + '"', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
+  if not Result then begin
+    Detail := '';
+    if LoadStringsFromFile(ReportPath, ReportLines) then
+      for I := 0 to GetArrayLength(ReportLines) - 1 do Detail := Detail + ReportLines[I] + #13#10;
+    Log('MIDI recovery exit code: ' + IntToStr(Code) + #13#10 + Detail);
+    MsgBox(L('Не удалось восстановить MIDI-службу. Код: ', 'MIDI service recovery failed. Code: ') + IntToStr(Code) + #13#10 + Detail, mbError, MB_OK);
+    Result := AllowInstallWithoutMidi;
+  end;
 end;
 
 function InitializeUninstall: Boolean;

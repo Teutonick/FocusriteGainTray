@@ -65,3 +65,15 @@ The Focusrite Notifier tray utility is separate from Focusrite Control 2. Versio
 ### MIDI recovery during upgrades
 
 From 1.0.4, use **Repair MIDI without restarting Windows…** in the tray. After explicit confirmation and UAC, a one-shot helper restarts only midisrv and relaunches FocGrain with normal rights. Other MIDI connections are temporarily interrupted; save work first. Setup detects incomplete/legacy shutdown and offers the same repair before upgrading. No shared-service restart occurs silently. [Recovery details](docs/MIDI_RECOVERY.en.md).
+
+### Sleep and hibernation (unreleased)
+
+Suspend invalidates the last-sent display and blocks gain commands. On automatic resume FocGrain waits three seconds and any in-flight operation, then closes/reopens its MIDI connection on the existing MTA worker. No gain is restored or replayed. A native timeout keeps the tray available for explicit MIDI repair; it never starts another worker or silently restarts midisrv. FC2 may need its FocGrain input reselected after endpoint recreation.
+
+`application.log` records power transitions, operation type, HRESULT and full managed exception, worker/thread information, shutdown requests and ProcessExit. `active-run.txt` detects a previous tray run without completed shutdown on next launch. Forced termination, native fail-fast and power loss may prevent final logging; the marker indicates an incomplete run, not its cause. Keep `application.log` and `application.log.previous` when reporting a failure.
+
+Manual acceptance still required: hibernate/wake with FC2 open, confirm tray remains responsive, no unsolicited CC, gain state unknown, user-triggered CC succeeds; repeat during an in-flight operation and with MIDI unavailable. On timeout confirm commands stay blocked, repair requires confirmation/UAC, and Quit remains bounded. Check logs after normal Quit and an externally terminated test process. These checks have not been run on hardware for this patch.
+
+In 1.0.6 setup can install an update without launching it if MIDI service repair is declined or fails. The dirty marker continues to block MIDI port opening until explicit repair. Recovery helper details appear in the setup log and error dialog.
+
+In 1.0.7 the elevated explicit-repair helper temporarily enables SeDebugPrivilege to open the verified SYSTEM-owned MidiSrv process, then restores its token. Missing privilege fails closed. A dirty marker now consistently points to Repair MIDI rather than the hidden Retry action.

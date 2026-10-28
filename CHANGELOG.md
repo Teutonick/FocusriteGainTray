@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.8 · 2026-10-28
+
+- Fix recovery across different UAC accounts: the original user clears its own dirty marker after verified helper success. An elevated machine receipt supersedes older per-user markers after installer recovery, while newer or malformed dirty markers remain blocked.
+- Confirmed from both account logs that 1.0.7 service restarts succeeded but the original user marker survived; previous access-only validation did not cover this gate.
+
+
+## 1.0.7 · 2026-10-28
+
+- Explicit elevated MIDI recovery temporarily enables SeDebugPrivilege for access to the verified dedicated SYSTEM service process, restores token state, and names failing native calls. Retain image, sole-service ownership, PID and Stop Pending checks.
+- Fix the click/hotkey hint when a dirty MIDI marker hides the retry action. Add a read-only recovery-access diagnostic that never stops or starts the service.
+
+
+## 1.0.6 · 2026-10-28
+
+- Permit an explicit upgrade without launch when MIDI repair fails or is declined; retain the dirty marker and block port opening until explicit repair. Record helper error details in the setup log and error dialog. No automatic shared-service reset.
+
+
+## 1.0.5 · 2026-10-28
+
+- Handle Windows suspend/automatic resume on the UI thread, invalidate old MIDI completions and rebuild the connection after wake without replaying gain. Keep native timeout quarantine and explicit service-repair consent.
+- Log fatal managed exceptions, late MIDI failures, cleanup errors, session shutdown messages, process exit and incomplete previous tray runs; serialize log rotation/writes.
+- Validation: .NET SDK 10.0.402 restore/build, Windows SDK 10.0.26100.57, MIDI SDK 0.99.92-preview.11; 31 model/worker scenarios. NuGet vulnerability metadata unavailable (NU1900). Actual hibernation and hardware recovery remain unverified.
+
+
 ## 1.0.0 · 2026-10-26
 
 - First accepted stable release: the owner confirms hardware gain MIN/MAX switching by tray click on Scarlett 4i4 4th Gen.

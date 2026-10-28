@@ -11,8 +11,10 @@ internal sealed class SetupRequestWindow : NativeWindow, IDisposable
     private readonly Action _show;
     private readonly Action _close;
     private readonly Action _activate;
-    public SetupRequestWindow(Action show, Action close, Action? activate = null)
+    private readonly Action<bool>? _power;
+    public SetupRequestWindow(Action show, Action close, Action? activate = null, Action<bool>? power = null)
     {
+        _power = power;
         _show = show;
         _close = close;
         _activate = activate ?? (() => { });
@@ -25,7 +27,16 @@ internal sealed class SetupRequestWindow : NativeWindow, IDisposable
     }
     protected override void WndProc(ref Message message)
     {
-        if (message.Msg == 0x10) { _close(); return; }
+        // WM_POWERBROADCAST is delivered on the owning UI thread, including automatic resume.
+        if (message.Msg == 0x218)
+        {
+            int kind = message.WParam.ToInt32();
+            if (kind == 4) _power?.Invoke(false); // PBT_APMSUSPEND
+            if (kind == 18) _power?.Invoke(true); // PBT_APMRESUMEAUTOMATIC (also unattended wake)
+        }
+        if (message.Msg == 0x11 || message.Msg == 0x16)
+            Log.Write($"Windows session shutdown message: 0x{message.Msg:X}; wParam={message.WParam}; lParam={message.LParam}");
+        if (message.Msg == 0x10) { Log.Write("Close requested via window message (installation/recovery/system)."); _close(); return; }
         if (MessageId != 0 && message.Msg == MessageId) { if (message.WParam != IntPtr.Zero) _show(); else _activate(); return; }
         base.WndProc(ref message);
     }

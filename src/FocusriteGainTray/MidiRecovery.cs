@@ -14,11 +14,21 @@ internal static class MidiRecovery
         catch (WaitHandleCannotBeOpenedException) { return false; }
         catch (UnauthorizedAccessException) { return true; }
     }
-    public static int RunElevated(int ownerPid)
+    public static int RunElevated(int ownerPid, string? reportPath = null)
     {
         if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator)) return 5;
+        void Report(string message)
+        {
+            Log.Write(message);
+            if (reportPath is not null)
+            {
+                try { File.AppendAllText(reportPath, $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}", new System.Text.UTF8Encoding(true)); }
+                catch (Exception ex) { Log.Write("Recovery report write failed: " + ex); }
+            }
+        }
         try
         {
+            Report("Recovery helper started; executable=" + Environment.ProcessPath);
             using var mutex = new Mutex(true, LockName, out bool first);
             if (!first) return 75;
             if (ownerPid > 0)
@@ -35,16 +45,17 @@ internal static class MidiRecovery
             }
             if (!SingleInstance.TryAcquire(out var ownership)) throw new IOException("Another FocGrain owns MIDI; recovery refused.");
             using var deviceOwner = ownership!;
-            Log.Write("Explicit elevated MIDI service recovery started.");
+            Report("Explicit elevated MIDI service recovery started.");
             using var service = new WindowsMidiServiceRecovery();
+            Report("Initial MIDI service state: " + service.Query());
             MidiRecoveryPolicy.Restart(service, () => Thread.Sleep(500));
-            MidiRecoveryState.Clear();
-            Log.Write("MIDI service recovery completed: Running. No gain sent.");
+            MidiRecoveryState.RecordCompleted();
+            Report("MIDI service recovery completed: Running. No gain sent.");
             return 0;
         }
         catch (Exception ex)
         {
-            Log.Write("MIDI service recovery failed: " + ex);
+            Report($"MIDI service recovery failed; HResult=0x{ex.HResult:X8}: {ex}");
             if (ownerPid > 0) MessageBox.Show(ex.Message, Ui.T("Не удалось восстановить MIDI", "MIDI recovery failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }

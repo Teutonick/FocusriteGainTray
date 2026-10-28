@@ -106,8 +106,9 @@ internal sealed class WindowsMidiVirtualController : IDisposable
             Log.Write("Virtual device-side connection opened: " + _deviceName);
             Log.Write("MIDI device endpoint: " + _device.DeviceEndpointDeviceId);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Write($"MIDI connect failed before cleanup; HResult=0x{ex.HResult:X8}: {ex}");
             Disconnect();
             throw;
         }
