@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.10 · 2026-10-29
+
+- Start FC2 minimized after MIDI readiness; leave an already running FC2 window unchanged.
+- Monitor FC2 process presence every two seconds. Show a red exclamation tray badge when FC2 is absent or MIDI is unavailable, with the reason in the tooltip and menu; block gain commands while FC2 is absent.
+- Process presence and successful MIDI sends do not establish hardware gain changes. Actual FC2 window/tray and Scarlett acceptance remain pending.
+
+## 1.0.9 · 2026-10-29
+
+- Replace destructive post-resume disconnect/recreate with bounded session/connection-open and WinMM visibility checks on the original MTA worker. Retry returned validation failures three times without sending CC; never replace a timed-out worker or reset midisrv automatically.
+- The supplied 2026-10-29 hibernation log confirmed the prior resume path hung in DisconnectEndpointConnection before creating a new port. Actual hibernation acceptance for this change remains pending.
+
+- Bound application.log and its single .previous archive to 512 KiB each (1 MiB combined). Rotate before overflow, bound oversized UTF-8 records with an explicit truncation notice, and trim older oversized files on the next write.
+
+
 ## 1.0.8 · 2026-10-28
 
 - Fix recovery across different UAC accounts: the original user clears its own dirty marker after verified helper success. An elevated machine receipt supersedes older per-user markers after installer recovery, while newer or malformed dirty markers remain blocked.

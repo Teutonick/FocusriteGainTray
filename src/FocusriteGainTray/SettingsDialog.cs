@@ -60,7 +60,7 @@ internal sealed class SettingsDialog : Form
         bool startupInitiallyEnabled = StartupRegistration.Enabled;
         var startup = new CheckBox { Text = Ui.T("Запускать при входе в Windows", "Start when I sign in to Windows"), Left = 17, Top = 377, Width = 550, Height = 28, Checked = startupInitiallyEnabled };
         Controls.Add(startup);
-        var fc2 = new CheckBox { Text = Ui.T("Запускать FC2 после готовности MIDI-порта", "Start FC2 after the MIDI port is ready"), Left = 17, Top = 412, Width = 550, Height = 28, Checked = current.StartFocusriteControl2 };
+        var fc2 = new CheckBox { Text = Ui.T("Запускать FC2 свёрнутым после готовности MIDI-порта", "Start FC2 minimized after the MIDI port is ready"), Left = 17, Top = 412, Width = 550, Height = 28, Checked = current.StartFocusriteControl2 };
         Controls.Add(fc2);
         var version = new Label { Text = $"FocGrain {ProductInfo.VersionText}", Left = 17, Top = 460, Width = 200, Height = 24 };
         var updates = new Button { Text = Ui.T("Проверить обновления…", "Check for updates…"), Left = 17, Top = 510, Width = 230, Height = 34 };

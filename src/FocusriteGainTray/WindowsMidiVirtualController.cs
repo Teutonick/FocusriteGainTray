@@ -25,7 +25,7 @@ internal sealed class WindowsMidiVirtualController : IDisposable
 
     public void Connect()
     {
-        if (IsConnected) { WaitForLegacyInput(); return; }
+        if (IsConnected) { Resume(); return; }
         Disconnect();
         Log.Write($"MIDI connect started: {_deviceName}; apartment={Thread.CurrentThread.GetApartmentState()}");
 
@@ -115,6 +115,15 @@ internal sealed class WindowsMidiVirtualController : IDisposable
         // Visibility can lag creation. Keep the open endpoint on a returned
         // visibility error: a retry checks it without tearing down/recreating it.
         WaitForLegacyInput();
+    }
+
+    public void Resume()
+    {
+        bool hasNativeState = _session is not null || _device is not null || _connection is not null;
+        bool sessionOpen = _session?.IsOpen == true;
+        bool connectionOpen = _connection?.IsOpen == true;
+        Log.Write($"MIDI resume validation: nativeState={hasNativeState}; sessionOpen={sessionOpen}; connectionOpen={connectionOpen}; preserving existing endpoint; no CC sent");
+        MidiResumePolicy.Run(hasNativeState, sessionOpen, connectionOpen, WaitForLegacyInput, Connect);
     }
 
     private void WaitForLegacyInput()

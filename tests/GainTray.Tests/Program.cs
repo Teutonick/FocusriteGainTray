@@ -265,6 +265,51 @@ Check("cross-account machine recovery supersedes only older valid dirty markers"
     Equal(false, RecoveryReceipt.Supersedes(marker, long.MaxValue));
     Equal(true, RecoveryReceipt.Supersedes(dirty.ToUniversalTime().ToString("O"), dirty.AddSeconds(1).UtcTicks));
 });
+Check("logs rotate before overflow and retain at most one MiB including previous", () => {
+    string dir = Path.Combine(Path.GetTempPath(), "focgrain-log-" + Guid.NewGuid().ToString("N"));
+    string path = Path.Combine(dir, "application.log");
+    try {
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(path, new string('x', Log.FileLimit * 2));
+        File.WriteAllText(path + ".previous", new string('y', Log.FileLimit * 2));
+        Log.Append(path, "newest\n");
+        Equal(true, File.ReadAllText(path).EndsWith("newest\n"));
+        for (int i = 0; i < 6; i++) Log.Append(path, new string('я', Log.FileLimit));
+        long total = new FileInfo(path).Length + new FileInfo(path + ".previous").Length;
+        Equal(true, total <= 1024 * 1024);
+        Equal(true, File.ReadAllText(path).EndsWith("[log record truncated]\n"));
+        var strict = new System.Text.UTF8Encoding(false, true);
+        strict.GetString(File.ReadAllBytes(path)); strict.GetString(File.ReadAllBytes(path + ".previous"));
+        Equal(2, Directory.GetFiles(dir).Length);
+    } finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+});
+Check("resume preserves open native endpoint and only checks visibility", () => {
+    var calls = new List<string>();
+    MidiResumePolicy.Run(true, true, true, () => calls.Add("visibility"), () => calls.Add("create"));
+    Equal("visibility", string.Join(',', calls));
+});
+Check("resume does not recreate stale or partially initialized native objects", () => {
+    foreach (var state in new[] { (false, false), (true, false), (false, true) }) {
+        try {
+            MidiResumePolicy.Run(true, state.Item1, state.Item2,
+                () => throw new Exception("Visibility checked on closed connection"),
+                () => throw new Exception("Stale connection recreated"));
+            throw new Exception("Closed native state accepted");
+        } catch (IOException) { }
+    }
+});
+Check("resume permits initial creation only when no native state exists", () => {
+    int created = 0;
+    MidiResumePolicy.Run(false, false, false, () => throw new Exception("No endpoint exists"), () => created++);
+    Equal(1, created);
+});
+Check("resume visibility failure keeps endpoint and remains retryable without replay", () => {
+    int checks = 0;
+    void CheckVisibility() { if (++checks == 1) throw new IOException("WinMM not ready"); }
+    try { MidiResumePolicy.Run(true, true, true, CheckVisibility, () => throw new Exception("Recreated")); } catch (IOException) { }
+    MidiResumePolicy.Run(true, true, true, CheckVisibility, () => throw new Exception("Recreated"));
+    Equal(2, checks);
+});
 Console.WriteLine($"{passed} scenarios passed");
 
 sealed class FakeMidi : IDisposable {

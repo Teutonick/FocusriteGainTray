@@ -17,6 +17,23 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly GainState _state = new();
     private Icon? _statusIcon;
     private bool _ready, _busy, _closing;
+    private readonly System.Windows.Forms.Timer _fc2Monitor = new() { Interval = 2000 };
+    private string? _fc2Path;
+    private bool _fc2Running;
+
+    private void CheckFc2()
+    {
+        try
+        {
+            _fc2Path ??= FocusriteControl2.Locate();
+            bool running = _fc2Path is not null && FocusriteControl2.IsRunning(_fc2Path);
+            if (running == _fc2Running) return;
+            _fc2Running = running;
+            _state.Reset();
+            RebuildMenu();
+        }
+        catch (Exception ex) { Log.Write("FC2 status check failed: " + ex.Message); _fc2Running = false; RebuildMenu(); }
+    }
 
     public TrayApplicationContext(bool showSetup = false, bool atLogon = false)
     {
@@ -30,6 +47,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception ex) { Alert(Ui.T("Горячие клавиши: ", "Keyboard shortcuts: ") + ex.Message); }
         RebuildMenu();
         _setupRequests = new SetupRequestWindow(() => WizardHost.Show(), () => ExitThread(), ActivateExisting, OnPowerChanged);
+        _fc2Monitor.Tick += (_, _) => CheckFc2();
+        CheckFc2();
+        _fc2Monitor.Start();
         Application.Idle += StartOnIdle;
     }
 
@@ -76,8 +96,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
                 Alert(Ui.T("После восстановления Windows MIDI не отвечает. Используйте «Восстановить MIDI без перезагрузки» в меню трея.", "After Windows resume MIDI is unresponsive. Use Repair MIDI without restarting Windows in the tray menu."));
                 return;
             }
-            Log.Write("Resume: rebuilding MIDI connection; no gain commands will be sent.");
-            await ConnectAsync(recreate: true);
+            Log.Write("Resume: validating preserved MIDI connection; no disconnect, recreation or gain commands.");
+            await MidiStartup.RunAsync(false,
+                async () => { await ConnectAsync(resume: true); return _ready; },
+                () => _midi.Faulted, () => _closing || generation != _power.Generation,
+                duration => Task.Delay(duration, _lifetime.Token));
         }
         catch (OperationCanceledException) when (_closing) { }
         catch (Exception ex) { Log.Write("Resume recovery failed: " + ex); }
@@ -88,12 +111,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private Task ConnectAsync(bool recreate = false)
+    private Task ConnectAsync(bool resume = false)
     {
         if (_busy || _closing || _power.Suspended || MidiRecoveryState.Required) return Task.CompletedTask;
         _ready = false;
         _state.Reset();
-        return RunMidiAsync(controller => { if (recreate) controller.Disconnect(); controller.Connect(); }, TimeSpan.FromSeconds(30), () =>
+        return RunMidiAsync(controller => { if (resume) controller.Resume(); else controller.Connect(); }, TimeSpan.FromSeconds(30), () =>
         {
             _ready = true;
             MidiRecoveryState.Clear();
@@ -101,7 +124,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _tray.BalloonTipTitle = "FocGrain";
             _tray.BalloonTipText = Ui.T("В FC2 выберите FocGrain, канал 1 / All channels и снимите Enable pickup. Пошаговый мастер доступен в меню трея.", "In FC2 select FocGrain, channel 1 / All channels, and turn OFF Enable pickup. Open the setup wizard from the tray menu.");
             _tray.ShowBalloonTip(6000);
-        });
+        }, resume ? "resume validation (preserve endpoint)" : "connect");
     }
 
     private async Task RunMidiAsync(Action<WindowsMidiVirtualController> action, TimeSpan timeout, Action onSuccess, string operation = "connect")
@@ -178,6 +201,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private Task SendGainAsync(int input, int value)
     {
+        CheckFc2();
+        if (!_fc2Running)
+        {
+            Alert(Ui.T("Focusrite Control 2 не запущен. Откройте FC2 и оставьте его свёрнутым для управления gain.", "Focusrite Control 2 is not running. Open FC2 and leave it minimized to control gain."));
+            return Task.CompletedTask;
+        }
         // Never queue clicks/hotkeys while native MIDI is busy: no delayed gain changes.
         if (_busy || _closing || _starting || _power.Suspended || _power.Recovering) return Task.CompletedTask;
         if (!_ready)
@@ -229,6 +258,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var menu = new ContextMenuStrip();
         string status = _busy ? Ui.T("MIDI: выполняется операция…", "MIDI: operation in progress…") : _ready ? Ui.T("Готов к управлению gain", "Ready to control gain") : _starting ? Ui.T("Ожидание готовности MIDI…", "Waiting for MIDI readiness…") : Ui.T("MIDI-порт не открыт", "MIDI port is not open");
         menu.Items.Add(new ToolStripMenuItem(status) { Enabled = false });
+        menu.Items.Add(new ToolStripMenuItem(_fc2Running ? Ui.T("FC2: запущен", "FC2: running") : Ui.T("FC2: не запущен — управление gain недоступно", "FC2: not running — gain control unavailable")) { Enabled = false });
         menu.Items.Add(new ToolStripSeparator());
         foreach (int channel in new[] { 1, 2 })
         {
@@ -279,7 +309,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         int input = _settings.SelectedInput;
         string mode = _ready ? _state.Mode(input, _settings.Channel(input)) : "!";
-        string icon = _busy ? "unknown" : mode switch { "MIN" => "min", "MAX" => "max", "MID" => "mid", "?" => "unknown", _ => "error" };
+        bool error = !_fc2Running || _midi.Faulted || MidiRecoveryState.Required || (!_ready && !_starting && !_busy) || _recovering;
+        string icon = error ? "error" : _busy ? "unknown" : mode switch { "MIN" => "min", "MAX" => "max", "MID" => "mid", "?" => "unknown", _ => "error" };
         var next = AppIcons.Load(icon);
         var previous = _statusIcon;
         _tray.Icon = next;
@@ -287,6 +318,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         previous?.Dispose();
         string unknown = Ui.T("неизвестно", "unknown");
         string text = _busy ? Ui.T("FocGrain — MIDI: ожидание…", "FocGrain — waiting for MIDI…") : $"Analog {input}: {mode} | {Ui.T("отправлено", "last sent")}: {_state.LastSent(input)?.ToString() ?? unknown}";
+        if (error) text = !_ready || _midi.Faulted || MidiRecoveryState.Required
+            ? Ui.T("FocGrain — MIDI недоступен", "FocGrain — MIDI unavailable")
+            : Ui.T("FocGrain — FC2 не запущен", "FocGrain — FC2 not running");
         _tray.Text = text.Length > 63 ? text[..63] : text;
     }
 
@@ -354,6 +388,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _closing = true;
         Log.Write($"Tray shutdown requested; busy={_busy}; ready={_ready}; suspended={_power.Suspended}; resuming={_power.Recovering}; workerFaulted={_midi.Faulted}");
         _lifetime.Cancel();
+        _fc2Monitor.Stop();
+        _fc2Monitor.Dispose();
         Application.Idle -= StartOnIdle;
         _setupRequests.Dispose();
         WizardHost.Close();

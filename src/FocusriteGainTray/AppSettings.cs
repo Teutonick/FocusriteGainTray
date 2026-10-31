@@ -77,18 +77,52 @@ internal static class SettingsStore
 internal static class Log
 {
     private static readonly object Gate = new();
+    internal const int FileLimit = 512 * 1024;
     public static void Write(string message)
     {
-        lock (Gate)
-        try
-        {
-            Directory.CreateDirectory(SettingsStore.DirectoryPath);
-            string path = Path.Combine(SettingsStore.DirectoryPath, "application.log");
-            if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
-                File.Move(path, path + ".previous", overwrite: true);
-            File.AppendAllText(path,
-                $"[{DateTimeOffset.Now:O}] [PID {Environment.ProcessId}] [TID {Environment.CurrentManagedThreadId}] {message}{Environment.NewLine}");
-        }
+        try { Append(Path.Combine(SettingsStore.DirectoryPath, "application.log"),
+            $"[{DateTimeOffset.Now:O}] [PID {Environment.ProcessId}] [TID {Environment.CurrentManagedThreadId}] {message}{Environment.NewLine}"); }
         catch { /* logging must never crash audio control */ }
+    }
+
+    internal static void Append(string path, string record)
+    {
+        lock (Gate)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            string previous = path + ".previous";
+            // Bound old files from earlier versions too, retaining their newest UTF-8 text.
+            TrimExisting(path);
+            TrimExisting(previous);
+            byte[] bytes;
+            if (System.Text.Encoding.UTF8.GetByteCount(record) > FileLimit)
+            {
+                byte[] suffix = System.Text.Encoding.UTF8.GetBytes("\n[log record truncated]\n");
+                bytes = new byte[FileLimit];
+                System.Text.Encoding.UTF8.GetEncoder().Convert(record.AsSpan(), bytes.AsSpan(0, FileLimit - suffix.Length), true,
+                    out _, out int used, out _);
+                suffix.CopyTo(bytes, used);
+                Array.Resize(ref bytes, used + suffix.Length);
+            }
+            else bytes = System.Text.Encoding.UTF8.GetBytes(record);
+            if (File.Exists(path) && new FileInfo(path).Length + bytes.Length > FileLimit)
+                File.Move(path, previous, overwrite: true);
+            using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+            stream.Write(bytes);
+        }
+    }
+
+    private static void TrimExisting(string path)
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length <= FileLimit) return;
+        byte[] tail = new byte[FileLimit];
+        using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            input.Seek(-FileLimit, SeekOrigin.End);
+            input.ReadExactly(tail);
+        }
+        int start = 0;
+        while (start < tail.Length && (tail[start] & 0xC0) == 0x80) start++;
+        File.WriteAllBytes(path, tail.AsSpan(start).ToArray());
     }
 }

@@ -22,7 +22,7 @@ function Draw-Mark([string]$mode) {
     $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
     $g.DrawArc($pen,52,46,152,152,135,270); $pen.Dispose()
     $angle = switch ($mode) { 'min' {135} 'max' {405} 'mid' {270} default {315} }
-    $color = switch ($mode) { 'min' {'#92979f'} 'max' {'#ff850a'} 'error' {'#ff7584'} 'unknown' {'#8ba2bc'} default {'#39dfc4'} }
+    $color = switch ($mode) { 'min' {'#92979f'} 'max' {'#ff850a'} 'error' {'#ff354d'} 'unknown' {'#8ba2bc'} default {'#39dfc4'} }
     $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($color),15)
     $pen.StartCap = $pen.EndCap = [Drawing.Drawing2D.LineCap]::Round
     $g.DrawArc($pen,52,46,152,152,135,[single][Math]::Max(1,($angle-135))); $pen.Dispose()
@@ -42,12 +42,15 @@ function Draw-Mark([string]$mode) {
         $g.DrawLine($pen,[single]($segment[0]+6),213,[single]($segment[0]+46),213);$pen.Dispose()
     }
     if ($mode -ne 'app') {
-        $fill = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml($color))
+        $badgeColor = if ($mode -eq 'error') { '#0b1425' } else { $color }
+        $fill = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml($badgeColor))
         $g.FillEllipse($fill,164,166,74,74);$fill.Dispose()
         $text = switch ($mode) { 'min' {''} 'max' {'+'} 'error' {'!'} 'unknown' {'?'} default {'•'} }
-        $font = [Drawing.Font]::new('Segoe UI',43,[Drawing.FontStyle]::Bold,[Drawing.GraphicsUnit]::Pixel)
+        $fontSize = if ($mode -eq 'error') { 68 } else { 43 }
+        $font = [Drawing.Font]::new('Segoe UI',$fontSize,[Drawing.FontStyle]::Bold,[Drawing.GraphicsUnit]::Pixel)
         $format=[Drawing.StringFormat]::new();$format.Alignment=$format.LineAlignment=[Drawing.StringAlignment]::Center
-        $fill=[Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#0b1425'))
+        $textColor = if ($mode -eq 'error') { $color } else { '#0b1425' }
+        $fill=[Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml($textColor))
         $g.DrawString($text,$font,$fill,[Drawing.RectangleF]::new(164,162,74,78),$format)
         $fill.Dispose();$font.Dispose();$format.Dispose()
     }

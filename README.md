@@ -60,15 +60,17 @@ Start FocGrain before FC2, wait for readiness, then select FocGrain again if FC2
 
 ### FC2 must be running, not just its tray notifier
 
-The Focusrite Notifier tray utility is separate from Focusrite Control 2. Version 1.0.3 starts the installed FC2 application once after the MIDI input is ready, unless FC2 is already running. This is enabled by default and can be disabled with **Start FC2 after the MIDI port is ready** in Settings. It opens FC2 normally; no undocumented background switches, gain commands or extra Windows startup entries are used. Quitting FocGrain does not terminate FC2. Windows startup for FocGrain remains a separate opt-in setting.
+FocGrain now minimizes FC2 when launching it; an already running FC2 window is left as it is. It checks the FC2 process every two seconds. A red exclamation badge means FC2 is absent or MIDI is unavailable; the tooltip and menu identify the problem. Gain commands are blocked while FC2 is absent. Process presence does not prove MIDI reception or hardware gain changes.
+
+The Focusrite Notifier tray utility is separate from Focusrite Control 2. Version 1.0.3 starts the installed FC2 application once after the MIDI input is ready, unless FC2 is already running. This is enabled by default and can be disabled with **Start FC2 after the MIDI port is ready** in Settings. It starts FC2 minimized; no undocumented background switches, gain commands or extra Windows startup entries are used. Quitting FocGrain does not terminate FC2. Windows startup for FocGrain remains a separate opt-in setting.
 
 ### MIDI recovery during upgrades
 
 From 1.0.4, use **Repair MIDI without restarting Windows…** in the tray. After explicit confirmation and UAC, a one-shot helper restarts only midisrv and relaunches FocGrain with normal rights. Other MIDI connections are temporarily interrupted; save work first. Setup detects incomplete/legacy shutdown and offers the same repair before upgrading. No shared-service restart occurs silently. [Recovery details](docs/MIDI_RECOVERY.en.md).
 
-### Sleep and hibernation (unreleased)
+### Sleep and hibernation
 
-Suspend invalidates the last-sent display and blocks gain commands. On automatic resume FocGrain waits three seconds and any in-flight operation, then closes/reopens its MIDI connection on the existing MTA worker. No gain is restored or replayed. A native timeout keeps the tray available for explicit MIDI repair; it never starts another worker or silently restarts midisrv. FC2 may need its FocGrain input reselected after endpoint recreation.
+Suspend invalidates the last-sent display and blocks gain commands. On automatic resume FocGrain waits three seconds and any in-flight operation, then checks its preserved MIDI connection on the existing MTA worker. No gain is restored or replayed. A native timeout keeps the tray available for explicit MIDI repair; it never starts another worker or silently restarts midisrv. FC2 may need its FocGrain input reselected after endpoint recreation.
 
 `application.log` records power transitions, operation type, HRESULT and full managed exception, worker/thread information, shutdown requests and ProcessExit. `active-run.txt` detects a previous tray run without completed shutdown on next launch. Forced termination, native fail-fast and power loss may prevent final logging; the marker indicates an incomplete run, not its cause. Keep `application.log` and `application.log.previous` when reporting a failure.
 
@@ -77,3 +79,7 @@ Manual acceptance still required: hibernate/wake with FC2 open, confirm tray rem
 In 1.0.6 setup can install an update without launching it if MIDI service repair is declined or fails. The dirty marker continues to block MIDI port opening until explicit repair. Recovery helper details appear in the setup log and error dialog.
 
 In 1.0.7 the elevated explicit-repair helper temporarily enables SeDebugPrivilege to open the verified SYSTEM-owned MidiSrv process, then restores its token. Missing privilege fails closed. A dirty marker now consistently points to Repair MIDI rather than the hidden Retry action.
+
+Application logs are limited to 1 MiB total: `application.log` and one `.previous` file, at most 512 KiB each. Rotation discards the oldest archive. Oversized records carry a truncation notice; older oversized logs are trimmed on the next write.
+
+From 1.0.9 resume preserves the existing native endpoint. It checks session/connection IsOpen and WinMM visibility with bounded retries; it never disconnects/recreates an existing endpoint after sleep. These checks do not prove FC2 delivery or hardware gain. Closed or unresponsive native state still needs explicit service recovery. No CC is sent for validation.

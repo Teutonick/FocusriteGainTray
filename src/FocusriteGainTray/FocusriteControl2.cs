@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace FocusriteGainTray;
 
@@ -52,11 +53,37 @@ internal static class FocusriteControl2
 
     public static void Launch(string executable)
     {
-        using var process = Process.Start(new ProcessStartInfo(executable)
-        {
-            UseShellExecute = true,
-            WorkingDirectory = Path.GetDirectoryName(executable)!,
-        });
-        if (process is null) throw new IOException("Focusrite Control 2 did not start.");
+        var process = Process.Start(new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Minimized,
+                WorkingDirectory = Path.GetDirectoryName(executable)!,
+            }) ?? throw new IOException("Focusrite Control 2 did not start.");
+        _ = MinimizeStartedProcessAsync(process);
     }
+
+    private static async Task MinimizeStartedProcessAsync(Process process)
+    {
+        using (process)
+        try
+        {
+            // FC2 may create its window after Process.Start returns and ignore SW_SHOWMINIMIZED.
+            for (int attempt = 0; attempt < 60; attempt++)
+            {
+                await Task.Delay(500);
+                process.Refresh();
+                if (process.HasExited) return;
+                if (process.MainWindowHandle == IntPtr.Zero) continue;
+                ShowWindowAsync(process.MainWindowHandle, 6); // SW_MINIMIZE, no activation
+                Log.Write("FC2 started and minimized.");
+                return;
+            }
+            Log.Write("FC2 started; no main window found within 30 seconds to minimize.");
+        }
+        catch (Exception ex) { Log.Write("FC2 minimized launch failed: " + ex); }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindowAsync(IntPtr window, int command);
 }
