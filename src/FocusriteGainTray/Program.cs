@@ -7,6 +7,8 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        using var deadline = ProcessDeadline.ForCommand(args) is { } timeout
+            ? ProcessDeadline.Arm(timeout, 29) : null;
         AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"FATAL unhandled exception; terminating={e.IsTerminating}: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => { Log.Write("Unobserved task exception: " + e.Exception); e.SetObserved(); };
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -23,6 +25,12 @@ internal static class Program
     private static int Run(string[] args)
     {
         Ui.Initialize();
+        if (args.Length == 1 && args[0] == "--lifecycle-test-deadline")
+        {
+            // No hardware or user state: simulate a permanently blocked native call.
+            Thread.Sleep(Timeout.Infinite);
+            return 0;
+        }
         if (args.Length == 2 && args[0] == "--check-midi-recovery-access")
         {
             try

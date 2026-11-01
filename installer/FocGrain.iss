@@ -71,7 +71,7 @@ Name: "{group}\{cm:UninstallApp}"; Filename: "{uninstallexe}"; IconFilename: "{a
 Name: "{group}\{cm:SetupWizard}"; Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; IconFilename: "{app}\FocGrain.exe"
 
 [Run]
-Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; Description: "{cm:LaunchApp}"; Flags: postinstall skipifsilent runasoriginaluser; Check: CanLaunchAfterInstall
+Filename: "{app}\FocGrain.exe"; Parameters: "--setup"; Description: "{cm:LaunchApp}"; Flags: postinstall skipifsilent runasoriginaluser nowait; Check: CanLaunchAfterInstall
 
 [CustomMessages]
 english.GuideFile=README.md

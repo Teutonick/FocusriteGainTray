@@ -386,6 +386,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (_closing) return;
         _closing = true;
+        // Keep armed through message-loop exit and runtime teardown. A timer
+        // callback does not need the UI thread to make progress.
+        _shutdownDeadline = ProcessDeadline.Arm(TimeSpan.FromSeconds(10), MidiRecoveryPolicy.DirtyShutdown);
         Log.Write($"Tray shutdown requested; busy={_busy}; ready={_ready}; suspended={_power.Suspended}; resuming={_power.Recovering}; workerFaulted={_midi.Faulted}");
         _lifetime.Cancel();
         _fc2Monitor.Stop();
@@ -410,4 +413,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Log.Write($"Tray shutdown completed; exitCode={Environment.ExitCode}");
         base.ExitThreadCore();
     }
+
+    private System.Threading.Timer? _shutdownDeadline;
 }

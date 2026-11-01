@@ -9,6 +9,10 @@ $children = @()
 $previousLocalAppData = $env:LOCALAPPDATA
 $env:LOCALAPPDATA = Join-Path $sandbox 'profile'
 try {
+    $deadlineHost = Start-Process $exe -ArgumentList '--lifecycle-test-deadline' -PassThru -WindowStyle Hidden
+    $children += $deadlineHost
+    if (!$deadlineHost.WaitForExit(10000) -or $deadlineHost.ExitCode -ne 29) { throw 'Process watchdog failed to terminate a blocked helper' }
+    Write-Host 'PASS blocked helper terminates within its process deadline (no MIDI)'
     foreach ($mode in @('host','unresponsive')) {
         $marker = Join-Path $sandbox "$mode.ready"
         $hostProcess = Start-Process $exe -ArgumentList "--lifecycle-test-$mode", "`"$marker`"" -PassThru -WindowStyle Hidden
